@@ -1,17 +1,8 @@
-"""
-
-@author: Dennis A. Simpson
-         University of North Carolina at Chapel Hill
-         Chapel Hill, NC  27599
-@copyright: 2022
-"""
+"""Target mapping utilities for ScarMapper."""
 
 import collections
-from Valkyries import Tool_Box
+from scarmapper import tools
 
-__author__ = 'Dennis A. Simpson'
-__version__ = '1.0.0'
-__package__ = 'ScarMapper'
 
 
 class TargetMapper:
@@ -21,8 +12,8 @@ class TargetMapper:
         :param log:
         :param args:
         """
-        self.target_data = Tool_Box.FileParser.indices(log, args.TargetFile)
-        # self.target_data = [x[0] for x in Tool_Box.FileParser.indices(log, args.TargetFile)]
+        self.target_data = tools.FileParser.indices(log, args.TargetFile)
+        # self.target_data = [x[0] for x in tools.FileParser.indices(log, args.TargetFile)]
         self.sample_manifest = sample_manifest
         self.log = log
         self.args = args

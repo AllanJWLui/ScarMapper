@@ -1,20 +1,11 @@
-"""
-PEAR consensus generation and FASTQ preprocessing utilities.
-
-@author: Dennis A. Simpson
-         University of North Carolina at Chapel Hill
-         Chapel Hill, NC  27599
-@copyright: 2023
-"""
+"""PEAR consensus generation and FASTQ preprocessing utilities."""
 
 import os
 import pathlib
 import subprocess
 
-from Valkyries import Tool_Box, FASTQ_Tools
+from scarmapper import tools
 
-__author__ = 'Dennis A. Simpson'
-__version__ = '2.0.0'
 
 
 def pear_consensus(args, log, fq1=None, fq2=None, sample_prefix=None):
@@ -25,7 +16,7 @@ def pear_consensus(args, log, fq1=None, fq2=None, sample_prefix=None):
     ----------
     args : argparse.Namespace
         Program arguments.
-    log : Tool_Box.Logger
+    log : tools.Logger
         Logger instance.
     fq1 : str, optional
         Path to R1 FASTQ (overrides args.FASTQ1 for batch mode).
@@ -100,7 +91,7 @@ def pear_consensus(args, log, fq1=None, fq2=None, sample_prefix=None):
     if pathlib.Path(discarded).exists():
         file_list.append(discarded)
     else:
-        Tool_Box.delete([discarded])
+        tools.delete([discarded])
 
     return file_list
 
@@ -116,7 +107,7 @@ def preprocess_misoriented_reads(args, log):
     Parameters
     ----------
     args : argparse.Namespace
-    log : Tool_Box.Logger
+    log : tools.Logger
 
     Returns
     -------
@@ -127,14 +118,14 @@ def preprocess_misoriented_reads(args, log):
     FORWARD_MARKER = "CTGGCTCCA"
     REVERSE_MARKER = "TGTGGCTCTG"
 
-    fq1 = FASTQ_Tools.FASTQ_Reader(args.FASTQ1, log)
-    fq2 = FASTQ_Tools.FASTQ_Reader(args.FASTQ2, log)
+    fq1 = tools.FASTQ_Reader(args.FASTQ1, log)
+    fq2 = tools.FASTQ_Reader(args.FASTQ2, log)
 
     corrected_r1_path = f"{args.WorkingFolder}{args.Job_Name}_corrected_R1.fastq"
     corrected_r2_path = f"{args.WorkingFolder}{args.Job_Name}_corrected_R2.fastq"
 
     # Remove stale output if it exists
-    Tool_Box.delete([corrected_r1_path, corrected_r2_path])
+    tools.delete([corrected_r1_path, corrected_r2_path])
 
     read_counter = 0
     good_reads = 0

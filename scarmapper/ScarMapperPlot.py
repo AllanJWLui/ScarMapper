@@ -1,20 +1,11 @@
-"""
-Draws main figures for ScarMapper
-
-@author: Dennis A. Simpson
-         University of North Carolina at Chapel Hill
-         Chapel Hill, NC  27599
-@copyright: 2022
-"""
+"""Draws main figures for ScarMapper."""
 
 import argparse
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import collections
-import Valkyries.Tool_Box as ToolBox
+from scarmapper import tools
 
-__author__ = 'Dennis A. Simpson'
-__version__ = '0.3.0'
 
 
 def scarmapperplot(args, datafile=None, sample_name=None, plot_data_dict=None, label_dict=None):
@@ -263,13 +254,13 @@ def build_plot_data_dict(df, color_dict):
 
 # This is here to run the module as a stand-alone.
 if __name__ == '__main__':
-    ToolBox.debug_messenger("Standing Alone")
+    tools.debug_messenger("Standing Alone")
 
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--options_file', action='store', dest='options_file', required=True,
                         help='File containing program parameters.')
 
-    options_parser = ToolBox.options_file(parser)
+    options_parser = tools.options_file(parser)
     args = options_parser.parse_args()
 
     scarmapperplot(args)

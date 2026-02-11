@@ -4,7 +4,8 @@
 Cython version of Sliding Window Module
 
 
-@author: Dennis A. Simpson
+@author: Allan Lui
+          Dennis A. Simpson
           University of North Carolina
           Lineberger Comprehensive Cancer Center
           450 West Drive
@@ -13,9 +14,7 @@ Cython version of Sliding Window Module
 
 """
 
-__version__ = "0.5.0"
-
-# from Valkyries import Tool_Box
+__version__ = "3.0.0"
 
 cpdef sliding_window(str consensus, str target_region, int cutsite, int target_length, int lower_limit, int upper_limit,
                      object summary_data, list left_target_windows, list right_target_windows, str cutwindow,

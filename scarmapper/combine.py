@@ -1,25 +1,14 @@
-"""
-Combine replicate frequency files and generate merged output with plots.
-
-@author: Dennis A. Simpson
-         University of North Carolina at Chapel Hill
-         Chapel Hill, NC  27599
-@copyright: 2023
-"""
+"""Combine replicate frequency files and generate merged output with plots."""
 
 import collections
-import csv
 import glob
 
 from natsort import natsort
 from scipy import stats
 from scipy.stats import gmean
 
-from Valkyries import Tool_Box
-from scarmapper import ScarMapperPlot
+from scarmapper import tools, ScarMapperPlot
 
-__author__ = 'Dennis A. Simpson'
-__version__ = '2.0.0'
 
 # Minimum frequency for a scar pattern to appear in the plot
 _PLOT_FREQ_FLOOR = 0.0025
@@ -72,7 +61,7 @@ def _collect_replicate_data(file_list, log):
     data_dict = collections.defaultdict(list)
 
     for file_name in file_list:
-        freq_data = Tool_Box.FileParser.indices(log, file_name)
+        freq_data = tools.FileParser.indices(log, file_name)
         for row in freq_data:
             key = f"{row[3]}|{row[4]}|{row[6]}|{row[8]}"
             row_data = row[2:]

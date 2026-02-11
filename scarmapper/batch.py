@@ -3,11 +3,6 @@ Batch processing for pre-demultiplexed samples.
 
 Each sample has its own FASTQ file(s) and is processed independently,
 with results collected into a single summary file.
-
-@author: Dennis A. Simpson
-         University of North Carolina at Chapel Hill
-         Chapel Hill, NC  27599
-@copyright: 2023
 """
 
 import datetime
@@ -16,12 +11,9 @@ import pathlib
 
 import pathos
 
-from Valkyries import Tool_Box, FASTQ_Tools
-from scarmapper import INDEL_Processing as Indel_Processing, TargetMapper as Target_Mapper
-from scarmapper.pear import pear_consensus
 
-__author__ = 'Dennis A. Simpson'
-__version__ = '2.0.0'
+from scarmapper import tools, INDEL_Processing as Indel_Processing, TargetMapper as Target_Mapper
+from scarmapper.pear import pear_consensus
 
 
 # ---------------------------------------------------------------------------
@@ -89,10 +81,10 @@ def _process_single_sample(args, log, sample_info, target_mapper, version, run_s
         if not file_list:
             log.error(f"  PEAR failed for {index_name}. Skipping.")
             return None
-        fq1 = FASTQ_Tools.FASTQ_Reader(file_list[0], log)
+        fq1 = tools.FASTQ_Reader(file_list[0], log)
     else:
         log.info(f"  Single-end reads detected. Skipping PEAR.")
-        fq1 = FASTQ_Tools.FASTQ_Reader(fastq1, log)
+        fq1 = tools.FASTQ_Reader(fastq1, log)
 
     # ------------------------------------------------------------------
     # Read sequences into memory
@@ -145,11 +137,11 @@ def _process_single_sample(args, log, sample_info, target_mapper, version, run_s
     if is_paired and file_list:
         if args.DeleteConsensusFASTQ:
             log.info(f"  Deleting PEAR FASTQ files for {index_name}.")
-            Tool_Box.delete(file_list)
+            tools.delete(file_list)
         else:
             log.info(f"  Compressing PEAR FASTQ files for {index_name}.")
             pool = pathos.multiprocessing.Pool(args.Spawn)
-            pool.starmap(Tool_Box.compress_files, zip(file_list, itertools.repeat(log)))
+            pool.starmap(tools.compress_files, zip(file_list, itertools.repeat(log)))
 
     return scar_search.summary_data
 
@@ -165,7 +157,7 @@ def batch_process_samples(args, log, version, run_start):
     """
     log.info("Starting batch processing of pre-demultiplexed samples")
 
-    sample_manifest = Tool_Box.FileParser.indices(log, args.SampleManifest)
+    sample_manifest = tools.FileParser.indices(log, args.SampleManifest)
     target_mapper = Target_Mapper.TargetMapper(log, args, sample_manifest)
 
     # Validate and collect samples

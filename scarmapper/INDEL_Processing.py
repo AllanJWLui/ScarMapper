@@ -1,9 +1,4 @@
-"""
-@author: Dennis A. Simpson
-         University of North Carolina at Chapel Hill
-         Chapel Hill, NC  27599
-@copyright: 2023
-"""
+"""INDEL processing for ScarMapper."""
 import collections
 import datetime
 import itertools
@@ -16,12 +11,9 @@ import math
 from scipy import stats
 from natsort import natsort
 import statistics
-from Valkyries import Tool_Box, Sequence_Magic, FASTQ_Tools
-from scarmapper import SlidingWindow, ScarMapperPlot
+from scarmapper import tools, SlidingWindow, ScarMapperPlot
 
-__author__ = 'Dennis A. Simpson'
-__version__ = '2.0.0 BETA'
-__package__ = 'ScarMapper'
+
 
 
 class ScarSearch:
@@ -59,8 +51,8 @@ class ScarSearch:
         
         # Reverse complement if needed
         if self.hr_donor and self.target_dict[index_dict[index_name][7]][5] == "YES":
-            from Valkyries import Sequence_Magic
-            self.hr_donor = Sequence_Magic.rcomp(self.hr_donor)
+            from Valkyries import tools
+            self.hr_donor = tools.rcomp(self.hr_donor)
             self.log.info(f"Reverse complemented HR_Donor for {index_name}: {self.hr_donor}")
         
         self.data_processing()
@@ -324,12 +316,12 @@ class ScarSearch:
             if self.target_dict[target_name][5] == "YES":
                 rt_del = len(results_freq_dict[freq_key][1][0])
                 lft_del = len(results_freq_dict[freq_key][1][1])
-                rt_kmer = Sequence_Magic.rcomp(self.left_target_windows[0])
-                lft_kmer = Sequence_Magic.rcomp(self.right_target_windows[0])
-                microhomology = Sequence_Magic.rcomp(microhomology)
-                insertion = Sequence_Magic.rcomp(insertion)
-                consensus = Sequence_Magic.rcomp(consensus)
-                target_sequence = Sequence_Magic.rcomp(self.target_region)
+                rt_kmer = tools.rcomp(self.left_target_windows[0])
+                lft_kmer = tools.rcomp(self.right_target_windows[0])
+                microhomology = tools.rcomp(microhomology)
+                insertion = tools.rcomp(insertion)
+                consensus = tools.rcomp(consensus)
+                target_sequence = tools.rcomp(self.target_region)
                 tmp_con_lft = consensus_lft_junction
                 tmp_target_lft = ref_lft_junction
                 consensus_lft_junction = len(consensus)-consensus_rt_junction
@@ -617,7 +609,7 @@ class ScarSearch:
         lft_position = ref_rt_junction - junction_padding
         while iteration_count < iteration_limit and not homology:
             target_segment = target_sequence[lft_position:lft_position+target_size]
-            distance_value = Sequence_Magic.match_maker(target_segment, lft_query)
+            distance_value = tools.match_maker(target_segment, lft_query)
             lft_homeology_position = iteration_count - junction_padding
 
             if distance_value == 0:
@@ -640,7 +632,7 @@ class ScarSearch:
         homeology = False
         while iteration_count < iteration_limit and not homology:
             target_segment = target_sequence[rt_position-target_size:rt_position]
-            distance_value = Sequence_Magic.match_maker(target_segment, rt_query)
+            distance_value = tools.match_maker(target_segment, rt_query)
             # rt_homeology = rt_position - target_size
 
             # rt_homeology_position = consensus_lft_junction - iteration_count + junction_padding
@@ -668,10 +660,10 @@ class ScarSearch:
         @param target_name:
         @return:
         """
-        lft_query1 = Sequence_Magic.rcomp(insertion[:5])
+        lft_query1 = tools.rcomp(insertion[:5])
         lft_query2 = insertion[-5:]
         rt_query1 = insertion[:5]
-        rt_query2 = Sequence_Magic.rcomp(insertion[-5:])
+        rt_query2 = tools.rcomp(insertion[-5:])
         lower_limit = lft_target_junction-50
         upper_limit = rt_target_junction+50
         left_not_found = True
@@ -689,7 +681,7 @@ class ScarSearch:
             if lft_query1 == target_segment or lft_query2 == target_segment:
                 lft_template = target_segment
                 if self.target_dict[target_name][5] == "YES":
-                    lft_template = Sequence_Magic.rcomp(target_segment)
+                    lft_template = tools.rcomp(target_segment)
                 left_not_found = False
 
             lft_position -= 1
@@ -703,7 +695,7 @@ class ScarSearch:
             if rt_query1 == target_segment or rt_query2 == target_segment:
                 rt_template = target_segment
                 if self.target_dict[target_name][5] == "YES":
-                    rt_template = Sequence_Magic.rcomp(target_segment)
+                    rt_template = tools.rcomp(target_segment)
                 right_not_found = False
 
             lft_position += 1
@@ -744,10 +736,10 @@ class ScarSearch:
             if self.target_dict[target_name][5] == "YES":
                 rt_del = len(data_list[0])
                 lft_del = len(data_list[1])
-                consensus = Sequence_Magic.rcomp(data_list[4])
-                target_region = Sequence_Magic.rcomp(self.target_region)
-                microhomology = Sequence_Magic.rcomp(data_list[3])
-                total_ins = Sequence_Magic.rcomp(data_list[2])
+                consensus = tools.rcomp(data_list[4])
+                target_region = tools.rcomp(self.target_region)
+                microhomology = tools.rcomp(data_list[3])
+                total_ins = tools.rcomp(data_list[2])
 
                 tmp_con_lft = consensus_lft_junction
                 tmp_target_lft = ref_lft_junction
@@ -784,7 +776,7 @@ class ScarSearch:
         rcomp_sgrna = False
 
         if self.target_dict[target_name][5] == 'YES':
-            working_sgrna = Sequence_Magic.rcomp(sgrna)
+            working_sgrna = tools.rcomp(sgrna)
             rcomp_sgrna = True
 
         cutsite_found = False
@@ -921,7 +913,7 @@ class DataProcessing:
                     if self.args.Demultiplex:
                         self.finalize_demultiplexing(fastq_data_dict)
 
-                    Tool_Box.debug_messenger("Limiting Reads Here to {}".format(read_limit))
+                    tools.debug_messenger("Limiting Reads Here to {}".format(read_limit))
                     eof = True
             fastq2_read = None
             try:
@@ -971,7 +963,7 @@ class DataProcessing:
                             self.phase_count[phase_key]["Phase " + r2_phase_name] += 0
 
                         # The phasing is the last N nucleotides of the consensus.
-                        if r2_phase[0] == Sequence_Magic.rcomp(fastq1_read.seq[-len(r2_phase[0]):]) and not r2_found:
+                        if r2_phase[0] == tools.rcomp(fastq1_read.seq[-len(r2_phase[0]):]) and not r2_found:
                             self.phase_count[phase_key]["Phase "+r2_phase_name] += 1
                             r2_found = True
 
@@ -989,7 +981,7 @@ class DataProcessing:
                     self.sequence_dict[index_name].append(right_seq)
 
                 elif self.args.Platform == "Ramsden":
-                    self.sequence_dict[index_name].append(Sequence_Magic.rcomp(fastq1_read.seq))
+                    self.sequence_dict[index_name].append(tools.rcomp(fastq1_read.seq))
 
                 else:
                     self.log.error("--Platform {} not correctly defined.  Edit parameter file and try again"
@@ -1042,7 +1034,7 @@ class DataProcessing:
         self.log.info("Spawning {} Jobs to Compress {} Files.".format(self.args.Spawn, len(fastq_file_name_list)))
 
         p = pathos.multiprocessing.Pool(self.args.Spawn)
-        p.starmap(Tool_Box.compress_files, zip(fastq_file_name_list, itertools.repeat(self.log)))
+        p.starmap(tools.compress_files, zip(fastq_file_name_list, itertools.repeat(self.log)))
 
         self.log.info("All Files Compressed")
 
@@ -1082,11 +1074,11 @@ class DataProcessing:
         # If we are saving the demultiplexed FASTQ then set up the output files and dataframe.
         if self.args.Demultiplex:
             self.fastq_outfile_dict = collections.defaultdict(list)
-            r1 = FASTQ_Tools.Writer(self.log, "{}{}_Unknown_R1.fastq"
+            r1 = tools.Writer(self.log, "{}{}_Unknown_R1.fastq"
                                     .format(self.args.WorkingFolder, self.args.Job_Name))
             r2 = ""
             if not self.args.PEAR:
-                r2 = FASTQ_Tools.Writer(self.log, "{}{}_Unknown_R2.fastq"
+                r2 = tools.Writer(self.log, "{}{}_Unknown_R2.fastq"
                                         .format(self.args.WorkingFolder, self.args.Job_Name))
                 self.fastq_outfile_dict['Unknown'] = [r1, r2]
 
@@ -1098,7 +1090,7 @@ class DataProcessing:
                 l_list = [x for x in l.strip("\n").split("\t")]
                 master_index_dict[l_list[0]] = [l_list[1], l_list[2]]
 
-        sample_index_list = Tool_Box.FileParser.indices(self.log, self.args.SampleManifest)
+        sample_index_list = tools.FileParser.indices(self.log, self.args.SampleManifest)
         index_dict = collections.defaultdict(list)
 
         for sample in sample_index_list:
@@ -1129,11 +1121,11 @@ class DataProcessing:
                  sample_replicate, target_name, sample_hr_donor]
 
             if self.args.Demultiplex:
-                r1 = FASTQ_Tools.Writer(self.log, "{}{}_{}_R1.fastq"
+                r1 = tools.Writer(self.log, "{}{}_{}_R1.fastq"
                                         .format(self.args.WorkingFolder, self.args.Job_Name, index_name))
                 r2 = ""
                 if not self.args.PEAR:
-                    r2 = FASTQ_Tools.Writer(self.log, "{}{}_{}_R2.fastq"
+                    r2 = tools.Writer(self.log, "{}{}_{}_R2.fastq"
                                             .format(self.args.WorkingFolder, self.args.Job_Name, index_name))
                     self.fastq_outfile_dict[index_name] = [r1, r2]
 
@@ -1168,23 +1160,23 @@ class DataProcessing:
 
             if self.args.Platform == "Illumina":
                 # The indices are after the last ":" in the header.
-                right_match = Sequence_Magic.match_maker(right_index, fastq1_read.name.split(":")[-1].split("+")[0])
-                left_match = Sequence_Magic.match_maker(left_index, fastq1_read.name.split(":")[-1].split("+")[1])
+                right_match = tools.match_maker(right_index, fastq1_read.name.split(":")[-1].split("+")[0])
+                left_match = tools.match_maker(left_index, fastq1_read.name.split(":")[-1].split("+")[1])
 
             elif self.args.Platform == "TruSeq":
                 # The indices are the first 6 and last 6 nucleotides of the consensus read.
-                left_match = Sequence_Magic.match_maker(right_index, fastq1_read.seq[:6])
-                right_match = Sequence_Magic.match_maker(left_index, fastq1_read.seq[-6:])
+                left_match = tools.match_maker(right_index, fastq1_read.seq[:6])
+                right_match = tools.match_maker(left_index, fastq1_read.seq[-6:])
 
             elif self.args.Platform == "Ramsden":
                 if self.args.PEAR:
                     left_match = \
-                        Sequence_Magic.match_maker(left_index, fastq1_read.seq[-len(left_index):])
+                        tools.match_maker(left_index, fastq1_read.seq[-len(left_index):])
                 else:
                     left_match = \
-                        Sequence_Magic.match_maker(Sequence_Magic.rcomp(left_index), fastq2_read.seq[:len(left_index)])
+                        tools.match_maker(tools.rcomp(left_index), fastq2_read.seq[:len(left_index)])
                 right_match = \
-                    Sequence_Magic.match_maker(right_index, fastq1_read.seq[:len(right_index)])
+                    tools.match_maker(right_index, fastq1_read.seq[:len(right_index)])
 
             if index_key not in self.read_count_dict:
                 self.read_count_dict[index_key] = 0
