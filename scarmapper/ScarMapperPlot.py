@@ -1,11 +1,12 @@
 """Draws main figures for ScarMapper."""
 
 import argparse
+import collections
+
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
-import collections
-from scarmapper import tools
 
+from scarmapper import tools
 
 
 def scarmapperplot(args, datafile=None, sample_name=None, plot_data_dict=None, label_dict=None):
@@ -23,11 +24,11 @@ def scarmapperplot(args, datafile=None, sample_name=None, plot_data_dict=None, l
         pass
 
     if sample_name:
-        output_file_name = "{}_{}.{}".format(args.Job_Name, sample_name, args.FigureType)
+        output_file_name = f"{args.Job_Name}_{sample_name}.{args.FigureType}"
     else:
         output_file_name = args.OutFile
 
-    output_file = "{}{}".format(args.WorkingFolder, output_file_name)
+    output_file = f"{args.WorkingFolder}{output_file_name}"
     # df = pandas.read_csv("{}{}".format(args.WorkingFolder, datafile), sep='\t', skiprows=8)
 
     # Define colors for scar types and labels
@@ -180,19 +181,19 @@ def scarmapperplot(args, datafile=None, sample_name=None, plot_data_dict=None, l
     # Add labels to X-axis and each plot.
     ax[3].set_xlabel('INDEL Size', fontname="sans-serif")
     """"""
-    ax[0].annotate('Insertion {}'.format(round(label_dict['Insertion'], 3)),
+    ax[0].annotate(f'Insertion {round(label_dict["Insertion"], 3)}',
                    xy=(ax[0].get_xlim()[1] * -0.98, ax[0].get_ylim()[1] * 0.9), color=insertion_color,
                    fontname="sans-serif", fontsize=14)
 
-    ax[1].annotate('Non-MH Deletion {}'.format(round(label_dict['Non-MH Deletion'], 3)),
+    ax[1].annotate(f'Non-MH Deletion {round(label_dict["Non-MH Deletion"], 3)}',
                    xy=(ax[1].get_xlim()[1] * -0.98, ax[1].get_ylim()[1] * 0.9), color=non_mh_del_color,
                    fontname="sans-serif", fontsize=14)
 
-    ax[2].annotate('TMEJ {}'.format(round(label_dict['TMEJ'], 3)),
+    ax[2].annotate(f'TMEJ {round(label_dict["TMEJ"], 3)}',
                    xy=(ax[2].get_xlim()[1] * -0.98, ax[2].get_ylim()[1] * 0.9), color=tmej_color,
                    fontname="sans-serif", fontsize=14)
 
-    ax[3].annotate('NHEJ {}'.format(round(label_dict['NHEJ'], 3)),
+    ax[3].annotate(f'NHEJ {round(label_dict["NHEJ"], 3)}',
                    xy=(ax[3].get_xlim()[1] * -0.98, ax[2].get_ylim()[1] * 0.9), color=nhej_color,
                    fontname="sans-serif", fontsize=14)
 

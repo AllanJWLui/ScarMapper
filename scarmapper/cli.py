@@ -2,12 +2,16 @@
 
 import argparse
 import datetime
-import pathlib
+import itertools
 import os
+import pathlib
 import sys
 import time
 
-from scarmapper import tools
+import pathos
+
+from scarmapper import INDEL_Processing as Indel_Processing, TargetMapper as Target_Mapper, tools
+from scarmapper.pear import pear_consensus
 
 __version__ = '3.0.0'
 __package__ = 'ScarMapper'
@@ -133,7 +137,7 @@ def main(command_line_args=None):
     Top-level entry point.
     """
     start_time = time.time()
-    
+
     if not command_line_args:
         command_line_args = sys.argv
 
@@ -173,13 +177,6 @@ def _run_batch(args, log, run_start):
 
 def _run_indel_processing(args, log, run_start):
     """Dispatch: standard indel-processing pipeline (multiplexed FASTQ)."""
-    import itertools
-    import pathos
-
-    from Valkyries import FASTQ_Tools
-    from scarmapper import INDEL_Processing as Indel_Processing, TargetMapper as Target_Mapper
-    from scarmapper.pear import pear_consensus
-
     valid_platforms = ("Illumina", "TruSeq", "Ramsden")
     if args.Platform not in valid_platforms:
         log.error(f"--Platform must be one of {valid_platforms}.")
@@ -193,11 +190,11 @@ def _run_indel_processing(args, log, run_start):
         if not file_list:
             log.error("PEAR failed. Check logs.")
             raise SystemExit(1)
-        fq1 = FASTQ_Tools.FASTQ_Reader(file_list[0], log)
+        fq1 = tools.FASTQ_Reader(file_list[0], log)
         fq2 = None
     else:
-        fq1 = FASTQ_Tools.FASTQ_Reader(args.FASTQ1, log)
-        fq2 = FASTQ_Tools.FASTQ_Reader(args.FASTQ2, log)
+        fq1 = tools.FASTQ_Reader(args.FASTQ1, log)
+        fq2 = tools.FASTQ_Reader(args.FASTQ2, log)
 
     sample_manifest = tools.FileParser.indices(log, args.SampleManifest)
     targeting = Target_Mapper.TargetMapper(log, args, sample_manifest)

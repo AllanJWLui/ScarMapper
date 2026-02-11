@@ -7,7 +7,7 @@ from natsort import natsort
 from scipy import stats
 from scipy.stats import gmean
 
-from scarmapper import tools, ScarMapperPlot
+from scarmapper import ScarMapperPlot, tools
 
 
 # Minimum frequency for a scar pattern to appear in the plot

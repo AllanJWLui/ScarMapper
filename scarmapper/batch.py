@@ -11,8 +11,7 @@ import pathlib
 
 import pathos
 
-
-from scarmapper import tools, INDEL_Processing as Indel_Processing, TargetMapper as Target_Mapper
+from scarmapper import INDEL_Processing as Indel_Processing, TargetMapper as Target_Mapper, tools
 from scarmapper.pear import pear_consensus
 
 

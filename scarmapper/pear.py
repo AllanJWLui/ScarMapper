@@ -7,7 +7,6 @@ import subprocess
 from scarmapper import tools
 
 
-
 def pear_consensus(args, log, fq1=None, fq2=None, sample_prefix=None):
     """
     Run PEAR to merge paired-end reads into consensus sequences.

@@ -6,6 +6,7 @@ FASTQ_Tools, and Sequence_Magic that ScarMapper actually uses.
 """
 
 import csv
+import getpass
 import gzip
 import inspect
 import logging
@@ -15,9 +16,8 @@ import pathlib
 import platform
 import re
 import resource
-import sys
-import getpass
 import socket
+import sys
 from contextlib import suppress
 from datetime import datetime
 
@@ -51,7 +51,7 @@ def compress_files(file, log):
         delete([file + ".gz"])
     cmd = "gzip -9 " + file
     os.system(cmd)
-    log.debug("{0} Compressed".format(file))
+    log.debug(f"{file} Compressed")
 
 
 def debug_messenger(reason=None):
@@ -59,8 +59,7 @@ def debug_messenger(reason=None):
     if reason is None:
         reason = "Programmer Neglected to Enlighten Us About the Need for Debugging This Section."
     frameinfo = inspect.getframeinfo(inspect.currentframe().f_back)
-    print("\033[1;31m***WARNING: Debugging Module {0} at Line {1}.\n\t-->REASON: {2}\033[m"
-          .format(frameinfo.filename, frameinfo.lineno, reason))
+    print(f"\033[1;31m***WARNING: Debugging Module {frameinfo.filename} at Line {frameinfo.lineno}.\n\t-->REASON: {reason}\033[m")
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +75,7 @@ def options_file(options_parser):
     config_file = options_parser.parse_args().options_file
 
     if not os.path.isfile(config_file):
-        print("\033[1;31mWARNING:\n\tOptions_File {} Not Found.  Check File Name and Path.".format(config_file))
+        print(f"\033[1;31mWARNING:\n\tOptions_File {config_file} Not Found.  Check File Name and Path.")
         raise SystemExit(1)
 
     options = csv.reader(open(config_file), delimiter='\t')
@@ -88,7 +87,7 @@ def options_file(options_parser):
         try:
             value = re.sub(r"[\s]", "", line[1].split("#")[0])
         except IndexError:
-            raise SystemExit("There is a syntax error in the options file on line {}".format(count))
+            raise SystemExit(f"There is a syntax error in the options file on line {count}")
 
         key = line[0].strip('--')
         options_parser.add_argument(line[0], dest=key, default=value)
@@ -107,9 +106,9 @@ class FileParser:
         Parse a tab-delimited index/manifest/target file and return a list of
         rows.  Blank lines and comment lines (starting with ``#``) are skipped.
         """
-        log.info("Parsing {}".format(input_file))
+        log.info(f"Parsing {input_file}")
         if not os.path.isfile(input_file):
-            log.error("{} Not Found.  Check File Name and Path.".format(input_file))
+            log.error(f"{input_file} Not Found.  Check File Name and Path.")
             raise SystemExit(1)
 
         index_list = []
@@ -127,13 +126,12 @@ class FileParser:
                         line[i] = line[i].split("#")[0]
                     except IndexError:
                         raise SystemExit(
-                            "There is a syntax error in file {0} on line {1}, column {2} "
-                            .format(input_file, str(line_num), str(i)))
+                            f"There is a syntax error in file {input_file} on line {line_num}, column {i} ")
                     line[i] = re.sub(",", '', line[i])
                     tmp_line.append(line[i])
                 index_list.append(tmp_line)
 
-        log.debug("Parsing Complete for  {}".format(input_file))
+        log.debug(f"Parsing Complete for  {input_file}")
         return index_list
 
 
@@ -149,18 +147,18 @@ class Logger:
     def __init__(self, args, console_stream=None, parellel_id=None):
         self._verbose = args.Verbose
         if parellel_id:
-            log_file = "{}_{}".format(args.Job_Name, parellel_id)
+            log_file = f"{args.Job_Name}_{parellel_id}"
         else:
             log_file = args.Job_Name
 
-        self._log_filename = "{0}{1}.log".format(args.WorkingFolder, log_file)
+        self._log_filename = f"{args.WorkingFolder}{log_file}.log"
 
         try:
             log = open(self._log_filename, "w")
             log.close()
         except IOError:
             raise SystemExit(
-                'Cannot create log file [{0}]. Review inputs and try again.'.format(self._log_filename))
+                f'Cannot create log file [{self._log_filename}]. Review inputs and try again.')
 
         if console_stream:
             self._console_stream = console_stream
@@ -225,11 +223,11 @@ class Logger:
 
 
 def log_environment_info(log, args, command_line_args):
-    log.info("original_command_line|{}".format(' '.join(command_line_args)))
-    log.info('command_options|{}'.format(args))
-    log.info('WorkingFolder|{}'.format(args.WorkingFolder))
-    log.info('platform_uname|{}'.format(platform.uname()))
-    log.info('platform_python_version|{}'.format(platform.python_version()))
+    log.info(f"original_command_line|{' '.join(command_line_args)}")
+    log.info(f'command_options|{args}')
+    log.info(f'WorkingFolder|{args.WorkingFolder}')
+    log.info(f'platform_uname|{platform.uname()}')
+    log.info(f'platform_python_version|{platform.python_version()}')
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +256,7 @@ class FASTQ_Reader:
             raise SystemExit(1)
 
         if not pathlib.Path(self.input_file).is_file():
-            self.log.warning("FASTQ file {} not found.  Correct error and run again.".format(self.input_file))
+            self.log.warning(f"FASTQ file {self.input_file} not found.  Correct error and run again.")
             raise SystemExit(1)
 
         try:
@@ -271,7 +269,7 @@ class FASTQ_Reader:
         elif "gzip" in mime_type:
             return gzip.open(self.input_file, 'rt', encoding='utf-8')
         else:
-            self.log.warning("Unsupported file-type for {}.  Only TEXT or GZIP Allowed.".format(self.input_file))
+            self.log.warning(f"Unsupported file-type for {self.input_file}.  Only TEXT or GZIP Allowed.")
             raise SystemExit(1)
 
     def line_reader(self):
@@ -299,11 +297,9 @@ class FASTQ_Reader:
 
             if len(self.seq) != len(self.qual):
                 self.log.error(
-                    "Sequence and quality scores of different lengths! \n{0:s}\n{1:s}\n{2:s}\n{3:s}"
-                    .format(self.name, self.seq, self.index, self.qual))
+                    f"Sequence and quality scores of different lengths! \n{self.name}\n{self.seq}\n{self.index}\n{self.qual}")
                 raise ValueError(
-                    "Sequence and quality scores of different lengths! \n{0:s}\n{1:s}\n{2:s}\n{3:s}"
-                    .format(self.name, self.seq, self.index, self.qual))
+                    f"Sequence and quality scores of different lengths! \n{self.name}\n{self.seq}\n{self.index}\n{self.qual}")
             yield self
 
         self.name = None
@@ -325,10 +321,10 @@ class Writer:
                 assert len(read[1]) == len(read[2])
             except AssertionError:
                 self.log.error(
-                    "Sequence and quality scores of different lengths! Read Name {0}; Seq Length {1}; "
-                    "Qual Length {2}".format(read[0], len(read[1]), len(read[2])))
+                    f"Sequence and quality scores of different lengths! Read Name {read[0]}; Seq Length {len(read[1])}; "
+                    f"Qual Length {len(read[2])}")
                 raise SystemExit(1)
-            outstring += "@{}\n{}\n+\n{}\n".format(read[0], read[1], read[2])
+            outstring += f"@{read[0]}\n{read[1]}\n+\n{read[2]}\n"
 
         self.file.write(outstring)
         read_list.clear()
