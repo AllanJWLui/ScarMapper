@@ -45,13 +45,24 @@ class ScarSearch:
         self.target_length = None
         self.left_target_windows = []
         self.right_target_windows = []
-        '''
-        if self.target_dict[index_dict[index_name][7]][5] == "YES":
-            self.hr_donor = Sequence_Magic.rcomp(args.HR_Donor)
-        else:
+        
+        # Get sample-specific HR_Donor, fallback to global setting
+        sample_hr_donor = self.index_dict[index_name][8] if len(self.index_dict[index_name]) > 8 else None
+        if sample_hr_donor:
+            self.hr_donor = sample_hr_donor
+            self.log.info(f"Using sample-specific HR_Donor for {index_name}: {sample_hr_donor}")
+        elif hasattr(args, 'HR_Donor') and args.HR_Donor:
             self.hr_donor = args.HR_Donor
-        '''
-        self.hr_donor = args.HR_Donor
+            self.log.info(f"Using global HR_Donor for {index_name}: {args.HR_Donor}")
+        else:
+            self.hr_donor = None
+        
+        # Reverse complement if needed
+        if self.hr_donor and self.target_dict[index_dict[index_name][7]][5] == "YES":
+            from Valkyries import Sequence_Magic
+            self.hr_donor = Sequence_Magic.rcomp(self.hr_donor)
+            self.log.info(f"Reverse complemented HR_Donor for {index_name}: {self.hr_donor}")
+        
         self.data_processing()
 
     def window_mapping(self):
@@ -217,10 +228,10 @@ class ScarSearch:
         target_name = self.index_dict[index_name][7]
         sgrna = self.target_dict[target_name][4]
         sample_name = "{}.{}".format(self.index_dict[index_name][5], self.index_dict[index_name][6])
-
+        
         hr_donor = ""
-        if self.args.HR_Donor:
-            hr_donor = "# HR Donor: {}\n".format(self.args.HR_Donor)
+        if self.hr_donor:
+            hr_donor = "# HR Donor: {}\n".format(self.hr_donor)
 
         page_header = \
             "# ScarMapper Search v{}\n# Run Start: {}\n# Run End: {}\n# Sample Name: {}\n# Locus Name: {}\n" \
@@ -1077,9 +1088,8 @@ class DataProcessing:
             if not self.args.PEAR:
                 r2 = FASTQ_Tools.Writer(self.log, "{}{}_Unknown_R2.fastq"
                                         .format(self.args.WorkingFolder, self.args.Job_Name))
-            self.fastq_outfile_dict['Unknown'] = [r1, r2]
+                self.fastq_outfile_dict['Unknown'] = [r1, r2]
 
-        # ToDo: call the demultiplex stuff from FASTQ_Tools.
         master_index_dict = {}
         with open(self.args.Master_Index_File) as f:
             for l in f:
@@ -1107,10 +1117,16 @@ class DataProcessing:
                 self.log.error("Sample Manifest is missing Target Name column")
                 raise SystemExit(1)
 
+            # Get sample-specific HR_Donor if available (column 7)
+            sample_hr_donor = ""
+            if len(sample) > 7 and sample[7]:
+                sample_hr_donor = sample[7].upper().strip()
+                self.log.info(f"Sample {index_name} has specific HR_Donor: {sample_hr_donor}")
+
             left_index_sequence, right_index_sequence = master_index_dict[index_name]
             index_dict[index_name] = \
                 [right_index_sequence.upper(), 0, left_index_sequence.upper(), 0, index_name, sample_name,
-                 sample_replicate, target_name]
+                 sample_replicate, target_name, sample_hr_donor]
 
             if self.args.Demultiplex:
                 r1 = FASTQ_Tools.Writer(self.log, "{}{}_{}_R1.fastq"
@@ -1119,7 +1135,7 @@ class DataProcessing:
                 if not self.args.PEAR:
                     r2 = FASTQ_Tools.Writer(self.log, "{}{}_{}_R2.fastq"
                                             .format(self.args.WorkingFolder, self.args.Job_Name, index_name))
-                self.fastq_outfile_dict[index_name] = [r1, r2]
+                    self.fastq_outfile_dict[index_name] = [r1, r2]
 
         return index_dict
 
@@ -1212,8 +1228,9 @@ class DataProcessing:
         summary_file = open("{}{}_ScarMapper_Summary.txt".format(self.args.WorkingFolder, self.args.Job_Name), "w")
 
         hr_labels = ""
-        if self.args.HR_Donor:
-            hr_labels = "HR Count\tHR Fraction"
+        if self.args.HR_Donor or any(len(self.index_dict[idx]) > 8 and self.index_dict[idx][8] 
+                                     for idx in self.index_dict):
+            hr_labels = "HR_Donor_Seq\tHR Count\tHR Fraction\t"
 
         sub_header = \
             "No Junction\tScar Count\tScar Fraction\tSNV\t{}\tLeft Deletion Count\tRight Deletion Count\t" \
@@ -1232,7 +1249,7 @@ class DataProcessing:
 
         hr_data = ""
         if self.args.HR_Donor:
-            hr_data = "HR Donor: {}\n".format(self.args.HR_Donor)
+            hr_data = "Global HR Donor: {}\n".format(self.args.HR_Donor)
 
         run_stop = datetime.datetime.today().strftime(self.date_format)
         summary_outstring = \
@@ -1246,12 +1263,6 @@ class DataProcessing:
             "Non-Microhomology Deletions\tNormalized Non-MH Del\tInsertion >=5 +/- Deletions\t" \
             "Normalized Insertion >=5+/- Deletions\tOther Scar Type\n"\
             .format(phasing_labels, sub_header)
-
-        '''
-        The data_list contains information for each library.  [0] index name; [1] reads passing all 
-        filters; [2] reads with a left junction; [3] reads with a right junction; [4] reads with an insertion;
-        [5] reads with microhomology; [6] reads with no identifiable cut; [7] filtered reads [8] scar type list.
-        '''
 
         for data_list in summary_data_list:    
             index_name = data_list.summary_data[0]
@@ -1286,12 +1297,15 @@ class DataProcessing:
             except ZeroDivisionError:
                 cut_fraction = 'nan'
 
-            # Process HR data if present
+            # Process HR data if present - show sample-specific HR_Donor
             hr_data = ""
-            if self.args.HR_Donor:
+            sample_hr_donor = self.index_dict[index_name][8] if len(self.index_dict[index_name]) > 8 else ""
+        
+            if sample_hr_donor or (hasattr(self.args, 'HR_Donor') and self.args.HR_Donor):
+                display_donor = sample_hr_donor if sample_hr_donor else self.args.HR_Donor
                 hr_count = "{}; {}".format(data_list.summary_data[10][0], data_list.summary_data[10][1])
-                hr_frequency = sum(data_list.summary_data[10])/passing_filters
-                hr_data = "\t{}\t{}".format(hr_count, hr_frequency)
+                hr_frequency = sum(data_list.summary_data[10])/passing_filters if passing_filters > 0 else 0
+                hr_data = "\t{}\t{}\t{}".format(display_donor, hr_count, hr_frequency)
 
             try:
                 tmej = data_list.summary_data[8][0]
@@ -1326,11 +1340,11 @@ class DataProcessing:
                         hr_data, left_del, right_del, total_ins, microhomology, microhomology_fraction, tmej,
                         tmej_fraction, nhej, nhej_fraction, non_microhomology_del, non_mh_del_fraction, large_ins,
                         large_ins_fraction, other_scar)
-        try:
-            summary_outstring += "\nUnidentified\t{}\t{}" \
-                .format(self.read_count_dict["unidentified"], self.read_count_dict["unidentified"] / self.read_count)
-        except KeyError:
-            pass
+            try:
+                summary_outstring += "\nUnidentified\t{}\t{}" \
+                    .format(self.read_count_dict["unidentified"], self.read_count_dict["unidentified"] / self.read_count)
+            except KeyError:
+                pass
 
         summary_file.write(summary_outstring)
         summary_file.close()

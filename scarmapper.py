@@ -56,18 +56,23 @@ if cfile:
 if not cfile or old_file:
     print("Compiled Module Doesn't Exist or is Old; Compiling New SlidingWindow Module")
     
-    setup_file = \
-        "python3.{2} setup.py build_ext --inplace"\
-        .format(pathlib.Path(__file__).parent.absolute(), os.sep, subver)
-
-    os.chdir(pathlib.Path(__file__).parent.absolute())
+    # Save current directory
+    original_dir = os.getcwd()
     
-    os.chdir("scarmapper")
-    subprocess.run([setup_file], shell=True)
-    os.chdir("..")
+    # Change to the parent directory (where scarmapper_AL.py is)
+    parent_dir = pathlib.Path(__file__).parent.absolute()
+    os.chdir(parent_dir)
+    
+    # Run setup.py from parent directory, pointing to the setup.py inside scarmapper
+    setup_command = f"python3.{subver} scarmapper/setup.py build_ext --inplace"
+    subprocess.run(setup_command, shell=True)
+    
+    # Return to original directory
+    os.chdir(original_dir)
+    
     # The sleep is to allow for network or disk latency.
     time.sleep(5.0)
-
+    
 from scarmapper import INDEL_Processing as Indel_Processing, TargetMapper as Target_Mapper
 
 __author__ = 'Dennis A. Simpson'
@@ -75,23 +80,32 @@ __version__ = '2.0.0 BETA'
 __package__ = 'ScarMapper'
 
 
-def pear_consensus(args, log, fq1=None, fq2=None):
+def pear_consensus(args, log, fq1=None, fq2=None, sample_prefix=None):
     """
     This will take the input FASTQ files and use PEAR to generate a consensus file.
     @param fq2:
     @param fq1:
     @param args:
     @param log:
+    @param sample_prefix: Optional prefix for output files (for batch mode)
     @return:
     """
     log.info("Beginning PEAR Consensus")
-    fastq1 = args.FASTQ1
-    fastq2 = args.FASTQ2
+    
+    # Check if FASTQ files were provided as parameters (batch mode)
     if fq1:
         fastq1 = fq1
         fastq2 = fq2
-
-    fastq_consensus_prefix = "{}{}".format(args.WorkingFolder, args.Job_Name)
+    else:
+        # Fall back to args attributes (single sample mode)
+        fastq1 = args.FASTQ1
+        fastq2 = args.FASTQ2
+    
+    # Use custom prefix if provided (batch mode), otherwise use Job_Name
+    if sample_prefix:
+        fastq_consensus_prefix = "{}{}".format(args.WorkingFolder, sample_prefix)
+    else:
+        fastq_consensus_prefix = "{}{}".format(args.WorkingFolder, args.Job_Name)
     fastq_consensus_file = "{}.assembled.fastq".format(fastq_consensus_prefix)
     discarded_fastq = "{}.discarded.fastq".format(fastq_consensus_prefix)
     r1_unassembled = "{}.unassembled.forward.fastq".format(fastq_consensus_prefix)
@@ -217,6 +231,264 @@ def preprocess_bad_fastq(args, log):
              .format(filtered_count, good_reads, read_counter))
     return fq1, fq2
 
+def process_single_sample(args, log, sample_info, target_mapper, version, run_start):
+    """
+    Process a single pre-demultiplexed sample.
+    
+    @param args: Command line arguments
+    @param log: Logger object
+    @param sample_info: Dictionary with sample information
+    @param target_mapper: TargetMapper object
+    @param version: Version string
+    @param run_start: Run start timestamp
+    @return: Summary data for the sample
+    """
+    import pathlib
+    
+    index_name = sample_info['Index_Name']
+    fastq1_path = sample_info['FASTQ1_Path']
+    fastq2_path = sample_info.get('FASTQ2_Path', '')
+    sample_hr_donor = sample_info.get('HR_Donor', '')
+    
+    log.info(f"Processing sample: {index_name}")
+    if sample_hr_donor:
+        log.info(f"Sample-specific HR_Donor: {sample_hr_donor}")
+    
+    # Check if paired-end or single-end
+    is_paired_end = fastq2_path and pathlib.Path(fastq2_path).exists()
+    
+    file_list = []
+    
+    if is_paired_end:
+        log.info(f"Paired-end reads detected for {index_name}. Running PEAR consensus.")
+        # Run PEAR with custom file names and unique prefix for this sample
+        file_list = pear_consensus(args, log, fq1=fastq1_path, fq2=fastq2_path, sample_prefix=index_name)
+        
+        if not file_list:
+            log.error(f"PEAR failed for {index_name}. Skipping.")
+            return None
+            
+        fastq_consensus = file_list[0]
+        fq1 = FASTQ_Tools.FASTQ_Reader(fastq_consensus, log)
+        fq2 = None
+    else:
+        log.info(f"Single-end reads detected for {index_name}. Skipping PEAR.")
+        fq1 = FASTQ_Tools.FASTQ_Reader(fastq1_path, log)
+        fq2 = None
+    
+    # Create a mock index_dict for this single sample
+    # Include sample-specific HR_Donor in position 8
+    index_dict = {
+        index_name: [
+            '',  # right_index_sequence (not used in pre-demux mode)
+            0,   # right_index_count
+            '',  # left_index_sequence (not used in pre-demux mode)
+            0,   # left_index_count
+            index_name,
+            sample_info['Sample_Name'],
+            sample_info['Replicate'],
+            sample_info['Locus'],
+            sample_hr_donor  # Sample-specific HR_Donor
+        ]
+    }
+    
+    # Create sequence list from FASTQ file
+    sequence_list = []
+    log.info(f"Reading sequences from {index_name}")
+    
+    eof = False
+    read_count = 0
+    while not eof:
+        try:
+            fastq_read = next(fq1.seq_read())
+            sequence_list.append(fastq_read.seq)
+            read_count += 1
+            
+            if read_count % 100000 == 0:
+                log.info(f"Read {read_count} sequences for {index_name}")
+                
+        except StopIteration:
+            eof = True
+    
+    log.info(f"Total sequences read for {index_name}: {read_count}")
+    
+    # Process the sample using ScarSearch
+    scar_search = Indel_Processing.ScarSearch(
+        log, args, version, run_start,
+        target_mapper.targets,
+        index_dict,
+        index_name,
+        sequence_list,
+        read_count,  # indexed_read_count
+        args.PatternThreshold * 0.00001  # lower_limit_count
+    )
+    
+    # Clean up PEAR files if needed
+    if is_paired_end and file_list:
+        if args.DeleteConsensusFASTQ:
+            log.info(f"Deleting PEAR FASTQ Files for {index_name}")
+            Tool_Box.delete(file_list)
+        else:
+            log.info(f"Compressing PEAR FASTQ Files for {index_name}")
+            import pathos
+            import itertools
+            p = pathos.multiprocessing.Pool(args.Spawn)
+            p.starmap(Tool_Box.compress_files, zip(file_list, itertools.repeat(log)))
+    
+    return scar_search.summary_data
+
+
+def batch_process_samples(args, log, version, run_start):
+    """
+    Process multiple pre-demultiplexed samples from Sample Manifest.
+    
+    @param args: Command line arguments
+    @param log: Logger object
+    @param version: Version string
+    @param run_start: Run start timestamp
+    """
+    log.info("Starting batch processing of pre-demultiplexed samples")
+    
+    # Parse sample manifest
+    sample_manifest = Tool_Box.FileParser.indices(log, args.SampleManifest)
+    
+    # Create target mapper
+    target_mapper = Target_Mapper.TargetMapper(log, args, sample_manifest)
+    
+    # Build list of samples to process
+    samples_to_process = []
+    for sample_row in sample_manifest:
+        # Determine column positions based on manifest format
+        # Format: Index_Name, Sample_Name, Replicate, Forward_Phase, Reverse_Phase, Locus, FASTQ1, FASTQ2, HR_Donor
+        sample_info = {
+            'Index_Name': sample_row[0],
+            'Sample_Name': sample_row[1],
+            'Replicate': sample_row[2],
+            'Forward_Phase': sample_row[3] if len(sample_row) > 3 else '',
+            'Reverse_Phase': sample_row[4] if len(sample_row) > 4 else '',
+            'Locus': sample_row[5] if len(sample_row) > 5 else '',
+            'FASTQ1_Path': sample_row[6] if len(sample_row) > 6 else '',
+            'FASTQ2_Path': sample_row[7] if len(sample_row) > 7 else '',
+            'HR_Donor': sample_row[8].upper().strip() if len(sample_row) > 8 and sample_row[8] else ''
+        }
+        
+        # Validate FASTQ1 exists
+        if not pathlib.Path(sample_info['FASTQ1_Path']).exists():
+            log.error(f"FASTQ1 file not found for {sample_info['Index_Name']}: {sample_info['FASTQ1_Path']}")
+            continue
+            
+        samples_to_process.append(sample_info)
+    
+    log.info(f"Found {len(samples_to_process)} samples to process")
+    
+    # Process samples (can be done in parallel or serial)
+    all_summary_data = []
+    
+    if args.Spawn > 1:
+        log.info(f"Processing samples in parallel with {args.Spawn} processes")
+        import pathos
+        p = pathos.multiprocessing.Pool(args.Spawn)
+        
+        # Prepare arguments for parallel processing
+        process_args = [
+            (args, log, sample_info, target_mapper, version, run_start)
+            for sample_info in samples_to_process
+        ]
+        
+        all_summary_data = p.starmap(process_single_sample, process_args)
+    else:
+        log.info("Processing samples serially")
+        for sample_info in samples_to_process:
+            summary_data = process_single_sample(args, log, sample_info, target_mapper, version, run_start)
+            if summary_data:
+                all_summary_data.append(summary_data)
+    
+    # Filter out None results (failed samples)
+    all_summary_data = [sd for sd in all_summary_data if sd is not None]
+    
+    # Write combined summary file
+    write_batch_summary(args, log, all_summary_data, version, run_start, samples_to_process)
+    
+    log.info("Batch processing complete")
+
+
+def write_batch_summary(args, log, all_summary_data, version, run_start, samples_info):
+    """
+    Write a summary file for batch-processed samples.
+    
+    @param args: Command line arguments
+    @param log: Logger object
+    @param all_summary_data: List of summary data from all samples
+    @param version: Version string
+    @param run_start: Run start timestamp
+    @param samples_info: List of sample information dictionaries
+    """
+    import datetime
+    
+    log.info("Writing batch summary file")
+    
+    summary_file = open(f"{args.WorkingFolder}{args.Job_Name}_Batch_Summary.txt", "w")
+    
+    run_stop = datetime.datetime.today().strftime("%a %b %d %H:%M:%S %Y")
+    
+    summary_outstring = f"ScarMapper Batch Processing v{version}\n"
+    summary_outstring += f"Start: {run_start}\nEnd: {run_stop}\n\n"
+    
+    # Check if any sample has HR_Donor
+    has_hr = any(info.get('HR_Donor', '') for info in samples_info)
+    
+    summary_outstring += "Index_Name\tSample_Name\tReplicate\tTarget\tTotal_Reads\t"
+    summary_outstring += "Passing_Filters\tScar_Count\tScar_Fraction\t"
+    if has_hr:
+        summary_outstring += "HR_Donor\tHR_Count\tHR_Fraction\t"
+    summary_outstring += "TMEJ\tNHEJ\tNon-MH_Deletion\tInsertion\tSNV\n"
+    
+    # Create lookup dictionaries for sample info by index_name
+    hr_donor_lookup = {info['Index_Name']: info.get('HR_Donor', '') for info in samples_info}
+    sample_name_lookup = {info['Index_Name']: info.get('Sample_Name', info['Index_Name']) for info in samples_info}
+    replicate_lookup = {info['Index_Name']: info.get('Replicate', '1') for info in samples_info}
+    
+    for summary_data in all_summary_data:
+        if not summary_data:
+            continue
+            
+        index_name = summary_data[0]
+        passing_filters = summary_data[1]
+        target = summary_data[9]
+        junction_data = summary_data[8]
+        
+        scar_count = passing_filters - summary_data[6][0] - summary_data[6][1]
+        scar_fraction = scar_count / passing_filters if passing_filters > 0 else 0
+        
+        # Extract repair pathway counts
+        tmej = junction_data[0] if junction_data else 0
+        nhej = junction_data[1] if junction_data else 0
+        non_mh_del = junction_data[4] if junction_data else 0
+        insertion = junction_data[2] if junction_data else 0
+        snv = junction_data[5] if junction_data else 0
+        
+        # Get sample name and replicate from manifest
+        sample_name = sample_name_lookup.get(index_name, index_name)
+        replicate = replicate_lookup.get(index_name, '1')
+        
+        summary_outstring += f"{index_name}\t{sample_name}\t{replicate}\t{target}\t{passing_filters}\t"
+        summary_outstring += f"{passing_filters}\t{scar_count}\t{scar_fraction:.4f}\t"
+        
+        if has_hr:
+            hr_donor = hr_donor_lookup.get(index_name, '')
+            hr_left = summary_data[10][0] if len(summary_data) > 10 else 0
+            hr_right = summary_data[10][1] if len(summary_data) > 10 else 0
+            hr_total = hr_left + hr_right
+            hr_freq = hr_total / passing_filters if passing_filters > 0 else 0
+            summary_outstring += f"{hr_donor}\t{hr_total}\t{hr_freq:.4f}\t"
+        
+        summary_outstring += f"{tmej}\t{nhej}\t{non_mh_del}\t{insertion}\t{snv}\n"
+    
+    summary_file.write(summary_outstring)
+    summary_file.close()
+    
+    log.info(f"Batch summary written to {args.WorkingFolder}{args.Job_Name}_Batch_Summary.txt")
+
 
 def main(command_line_args=None):
     """
@@ -245,9 +517,13 @@ def main(command_line_args=None):
     module_name = ""
     log.info("{} v{}".format(__package__, __version__))
 
-    # fq1, fq2 = preprocess_bad_fastq(args, log, fq1, fq2)
-
-    if args.IndelProcessing:
+    # Check if we're in batch mode (pre-demultiplexed samples)
+    if hasattr(args, 'BatchMode') and args.BatchMode:
+        log.info("Running in Batch Mode for pre-demultiplexed samples")
+        batch_process_samples(args, log, __version__, run_start)
+        
+    elif args.IndelProcessing:
+        # Original processing logic for multiplexed FASTQ files
         file_list = []
         if args.Platform == "Illumina" or args.Platform == "Ramsden" or args.Platform == "TruSeq":
             log.info("Sending FASTQ files to FASTQ preprocessor.")
@@ -436,7 +712,6 @@ def main(command_line_args=None):
     log.info("****ScarMapper {0} complete ({1} seconds, {2} Mb peak memory).****"
              .format(module_name, elapsed_time, Tool_Box.peak_memory(), warning))
 
-    # Python is not releasing the log file on some virtual Linux installations.
     exit(0)
 
 
@@ -523,7 +798,6 @@ def string_to_boolean(parser):
     args = options_parser.parse_args()
 
     if args.IndelProcessing == "True":
-        # Tool_Box.debug_messenger("Pear set to FALSE.")
         options_parser.set_defaults(PEAR=True)
         options_parser.set_defaults(Demultiplex=bool(strtobool(args.Demultiplex)))
         options_parser.set_defaults(OutputRawData=bool(strtobool(args.OutputRawData)))
@@ -531,6 +805,12 @@ def string_to_boolean(parser):
 
     options_parser.set_defaults(IndelProcessing=bool(strtobool(args.IndelProcessing)))
     options_parser.set_defaults(Verbose=args.Verbose.upper())
+    
+    # Add batch mode setting
+    if hasattr(args, 'BatchMode'):
+        options_parser.set_defaults(BatchMode=bool(strtobool(args.BatchMode)))
+    else:
+        options_parser.set_defaults(BatchMode=False)
 
     return options_parser
 

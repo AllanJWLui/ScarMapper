@@ -32,7 +32,7 @@ exit
 # PEAR Options.  Leave blank for defaults
 --TestMethod	
 --PValue	0.05 # Default 0.01
---Memory	20000M # Default 200M.  Recommend >3000M.  Program will crash if value > available memory.
+--Memory	4000M # Default 200M.  Recommend >3000M.  Program will crash if value > available memory.
 --MinOverlap	# Default 10
 --QualityThreshold	# Default 40
 --PhredValue	# Default 33
