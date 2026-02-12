@@ -58,26 +58,83 @@ Alternatively, if PEAR is already available (e.g. via `module load`), you can in
 
 For HPC clusters where Docker is unavailable, use Singularity to run containerized ScarMapper.
 
-**Pull the pre-built image:**
+#### Pull the image
 
 ```bash
-# Docker
-docker pull ghcr.io/allanjwlui/scarmapper:3.0.0
-
 # Singularity (on HPC)
 singularity pull docker://ghcr.io/allanjwlui/scarmapper:3.0.0
+# Creates: scarmapper_3.0.0.sif
+
+# Docker (local machine)
+docker pull ghcr.io/allanjwlui/scarmapper:3.0.0
 ```
 
-**Run with Singularity:**
+#### Quick start with Singularity
 
 ```bash
+# Show help
+singularity exec scarmapper_3.0.0.sif scarmapper --help
+
+# Run with bind mounts
 singularity exec \
-  --bind /path/to/data:/data,/path/to/output:/output \
+  --bind /path/to/your/data:/data \
+  --bind /path/to/your/output:/output \
+  scarmapper_3.0.0.sif \
+  scarmapper --options_file /data/ScarMapper_IndelProcessing.cfg
+```
+
+#### Full workflow example
+
+```bash
+# Setup
+cd /scratch/your_username/scarmapper_run
+singularity pull docker://ghcr.io/allanjwlui/scarmapper:3.0.0
+
+# Organize files
+mkdir -p data output
+cp your_R1.fastq.gz your_R2.fastq.gz data/
+cp reference.fasta reference.fasta.fai data/
+cp *.tsv data/  # manifest, targets, index files
+cp ScarMapper_IndelProcessing.cfg data/
+
+# IMPORTANT: Edit the .cfg file to use container paths
+# All paths in the config must use /data/ or /output/ prefixes:
+#   Reference_Genome    /data/reference.fasta
+#   FASTQ1              /data/your_R1.fastq.gz
+#   Target_File         /data/targets.tsv
+#   Working_Folder      /output/
+
+# Run ScarMapper
+singularity exec \
+  --bind $(pwd)/data:/data \
+  --bind $(pwd)/output:/output \
+  scarmapper_3.0.0.sif \
+  scarmapper --options_file /data/ScarMapper_IndelProcessing.cfg
+
+# Results will be in ./output/
+```
+
+#### HPC job script example
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=scarmapper
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=40G
+#SBATCH --time=4:00:00
+
+module load singularity  # if needed
+
+cd /scratch/$USER/scarmapper_project
+
+singularity exec \
+  --bind ./data:/data \
+  --bind ./output:/output \
   scarmapper_3.0.0.sif \
   scarmapper --options_file /data/config.cfg
 ```
 
-**Run with Docker:**
+#### Running with Docker
 
 ```bash
 docker run --rm \
@@ -87,13 +144,18 @@ docker run --rm \
   --options_file /data/config.cfg
 ```
 
-**Build locally:**
+#### Build locally
 
 ```bash
 docker build -t scarmapper .
 ```
 
-**Important:** File paths in `.cfg` options files must use container-side mount points (`/data/`, `/output/`), not your local filesystem paths.
+#### Important notes
+
+- **Bind mounts**: Use `--bind local_path:container_path` to make your files accessible inside the container
+- **Config file paths**: All file paths in `.cfg` options files must use container-side paths (`/data/`, `/output/`), not your local filesystem paths
+- **Read-only mounts**: Add `:ro` suffix for read-only access (e.g., `--bind /genomes:/genomes:ro`)
+- **Multiple bind mounts**: You can bind multiple directories as needed
 
 ### Input Files
 
