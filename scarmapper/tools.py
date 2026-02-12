@@ -265,7 +265,7 @@ class FASTQ_Reader:
             mime_type = magic.from_file(self.input_file, mime=True)
 
         if "text" in mime_type:
-            return open(self.input_file, 'rU')
+            return open(self.input_file, 'r')
         elif "gzip" in mime_type:
             return gzip.open(self.input_file, 'rt', encoding='utf-8')
         else:
