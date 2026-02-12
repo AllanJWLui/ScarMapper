@@ -54,6 +54,47 @@ conda activate scarmapper
 
 Alternatively, if PEAR is already available (e.g. via `module load`), you can install ScarMapper with pip alone.
 
+### Running with Docker / Singularity
+
+For HPC clusters where Docker is unavailable, use Singularity to run containerized ScarMapper.
+
+**Pull the pre-built image:**
+
+```bash
+# Docker
+docker pull ghcr.io/allanjwlui/scarmapper:3.0.0
+
+# Singularity (on HPC)
+singularity pull docker://ghcr.io/allanjwlui/scarmapper:3.0.0
+```
+
+**Run with Singularity:**
+
+```bash
+singularity exec \
+  --bind /path/to/data:/data,/path/to/output:/output \
+  scarmapper_3.0.0.sif \
+  scarmapper --options_file /data/config.cfg
+```
+
+**Run with Docker:**
+
+```bash
+docker run --rm \
+  -v /path/to/data:/data \
+  -v /path/to/output:/output \
+  ghcr.io/allanjwlui/scarmapper:3.0.0 \
+  --options_file /data/config.cfg
+```
+
+**Build locally:**
+
+```bash
+docker build -t scarmapper .
+```
+
+**Important:** File paths in `.cfg` options files must use container-side mount points (`/data/`, `/output/`), not your local filesystem paths.
+
 ### Input Files
 
 ScarMapper requires several input files. Templates are provided in the `docs/` directory.

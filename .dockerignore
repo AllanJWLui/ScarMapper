@@ -1,0 +1,55 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Python cache and build artifacts
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info
+.eggs/
+build/
+dist/
+*.whl
+
+# Testing
+test/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Data directories (don't include in image)
+Results/
+FASTQ/
+data/
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+
+# Reports and outputs
+*.html
+*.pdf
+
+# Development environment
+.env
+.venv
+venv/
+env/
+ENV/
+.python-version
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation build
+docs/_build/
