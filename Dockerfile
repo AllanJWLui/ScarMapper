@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy project files
 WORKDIR /build
-COPY pyproject.toml setup.py MANIFEST.in ./
+COPY pyproject.toml setup.py ./
 COPY scarmapper/ ./scarmapper/
 
 # Install Python package to /install prefix
