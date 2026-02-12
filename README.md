@@ -24,7 +24,7 @@ All Python dependencies are installed automatically via pip.
 Clone or download this repository, then install with pip:
 
 ```bash
-git clone https://github.com/Gaorav-Gupta-Lab/ScarMapper.git
+git clone https://github.com/AllanJWLui/ScarMapper.git
 cd ScarMapper
 pip install .
 ```
@@ -40,6 +40,19 @@ Verify installation:
 ```bash
 scarmapper --help
 ```
+
+### Installation with Conda (recommended for HPC)
+
+This installs ScarMapper and the PEAR binary together:
+
+```bash
+git clone https://github.com/AllanJWLui/ScarMapper.git
+cd ScarMapper
+conda env create -f environment.yml
+conda activate scarmapper
+```
+
+Alternatively, if PEAR is already available (e.g. via `module load`), you can install ScarMapper with pip alone.
 
 ### Input Files
 

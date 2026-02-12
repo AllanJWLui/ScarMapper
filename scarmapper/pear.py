@@ -2,9 +2,25 @@
 
 import os
 import pathlib
+import shutil
 import subprocess
 
 from scarmapper import tools
+
+
+def _find_pear_binary():
+    """Locate the PEAR executable: system PATH first, then bundled fallback."""
+    # 1. System PATH (HPC module, conda, manual install)
+    system_pear = shutil.which("pear")
+    if system_pear:
+        return system_pear
+
+    # 2. Bundled fallback (git clone / development checkout)
+    bundled = pathlib.Path(__file__).parent.parent / "Pear" / "bin" / "pear"
+    if bundled.is_file():
+        return str(bundled)
+
+    return None
 
 
 def pear_consensus(args, log, fq1=None, fq2=None, sample_prefix=None):
@@ -43,7 +59,13 @@ def pear_consensus(args, log, fq1=None, fq2=None, sample_prefix=None):
     }
 
     # Build the PEAR command from optional parameters
-    pear_binary = f"{pathlib.Path(__file__).parent.parent.absolute()}{os.sep}Pear{os.sep}bin{os.sep}pear"
+    pear_binary = _find_pear_binary()
+    if pear_binary is None:
+        log.error(
+            "PEAR executable not found. Install PEAR and ensure it is on your PATH, "
+            "or run from a ScarMapper git clone that contains the Pear/bin/pear binary."
+        )
+        return None
     cmd_parts = [
         pear_binary,
         f"-f {fastq1}",
