@@ -1,27 +1,19 @@
-"""
-@author: Dennis A. Simpson
-         University of North Carolina at Chapel Hill
-         Chapel Hill, NC  27599
-@copyright: 2023
-"""
+"""INDEL processing for ScarMapper."""
 import collections
 import datetime
 import itertools
+import math
+import statistics
 import subprocess
 import time
+
 import pathos
 import pyfaidx
 import pysam
-import math
-from scipy import stats
 from natsort import natsort
-import statistics
-from Valkyries import Tool_Box, Sequence_Magic, FASTQ_Tools
-from scarmapper import SlidingWindow, ScarMapperPlot
+from scipy import stats
 
-__author__ = 'Dennis A. Simpson'
-__version__ = '2.0.0 BETA'
-__package__ = 'ScarMapper'
+from scarmapper import ScarMapperPlot, SlidingWindow, tools
 
 
 class ScarSearch:
@@ -45,13 +37,23 @@ class ScarSearch:
         self.target_length = None
         self.left_target_windows = []
         self.right_target_windows = []
-        '''
-        if self.target_dict[index_dict[index_name][7]][5] == "YES":
-            self.hr_donor = Sequence_Magic.rcomp(args.HR_Donor)
-        else:
+
+        # Get sample-specific HR_Donor, fallback to global setting
+        sample_hr_donor = self.index_dict[index_name][8] if len(self.index_dict[index_name]) > 8 else None
+        if sample_hr_donor:
+            self.hr_donor = sample_hr_donor
+            self.log.info(f"Using sample-specific HR_Donor for {index_name}: {sample_hr_donor}")
+        elif hasattr(args, 'HR_Donor') and args.HR_Donor:
             self.hr_donor = args.HR_Donor
-        '''
-        self.hr_donor = args.HR_Donor
+            self.log.info(f"Using global HR_Donor for {index_name}: {args.HR_Donor}")
+        else:
+            self.hr_donor = None
+
+        # Reverse complement if needed
+        if self.hr_donor and self.target_dict[index_dict[index_name][7]][5] == "YES":
+            self.hr_donor = tools.rcomp(self.hr_donor)
+            self.log.info(f"Reverse complemented HR_Donor for {index_name}: {self.hr_donor}")
+
         self.data_processing()
 
     def window_mapping(self):
@@ -85,7 +87,7 @@ class ScarSearch:
         @return:
         """
 
-        self.log.info("Begin Processing {}".format(self.index_name))
+        self.log.info(f"Begin Processing {self.index_name}")
         """
         Summary_Data List: index_name, total aberrant, left deletions, right deletions, total deletions, left 
         insertions, right insertions, total insertions, microhomology, number filtered, target_name
@@ -104,7 +106,7 @@ class ScarSearch:
         try:
             start = self.target_dict[target_name][2]
         except IndexError:
-            self.log.error("Target file incorrectly formatted for {}".format(target_name))
+            self.log.error(f"Target file incorrectly formatted for {target_name}")
             return
 
         # Get the genomic 3' coordinate of the reference target region.
@@ -118,7 +120,7 @@ class ScarSearch:
         try:
             refseq.fetch(chrm, start, stop)
         except KeyError:
-            chrm = "chr{}".format(chrm)
+            chrm = f"chr{chrm}"
 
         try:
             self.target_region = str(refseq.fetch(chrm, start, stop)).upper()
@@ -136,9 +138,7 @@ class ScarSearch:
             loop_count += 1
 
             if loop_count % 10000 == 0:
-                self.log.info("Processed {} reads of {} for {} in {} seconds. Elapsed time: {} seconds."
-                              .format(loop_count, len(self.sequence_list), self.index_name, time.time() - split_time,
-                                      time.time() - start_time))
+                self.log.info(f"Processed {loop_count} reads of {len(self.sequence_list)} for {self.index_name} in {time.time() - split_time} seconds. Elapsed time: {time.time() - start_time} seconds.")
                 split_time = time.time()
 
             consensus_seq = seq
@@ -185,7 +185,7 @@ class ScarSearch:
 
             if sub_list:
                 read_results_list.append(sub_list)
-                freq_key = "{}|{}|{}|{}|{}".format(sub_list[0], sub_list[1], sub_list[2], sub_list[3], sub_list[9])
+                freq_key = f"{sub_list[0]}|{sub_list[1]}|{sub_list[2]}|{sub_list[3]}|{sub_list[9]}"
 
             else:
                 continue
@@ -195,7 +195,7 @@ class ScarSearch:
             else:
                 results_freq_dict[freq_key] = [1, sub_list]
 
-        self.log.info("Finished Processing {}".format(self.index_name))
+        self.log.info(f"Finished Processing {self.index_name}")
 
         # Write frequency results file and plot results
         self.frequency_output(self.index_name, results_freq_dict, junction_type_data)
@@ -216,17 +216,16 @@ class ScarSearch:
         run_stop = datetime.datetime.today().strftime(date_format)
         target_name = self.index_dict[index_name][7]
         sgrna = self.target_dict[target_name][4]
-        sample_name = "{}.{}".format(self.index_dict[index_name][5], self.index_dict[index_name][6])
+        sample_name = f"{self.index_dict[index_name][5]}.{self.index_dict[index_name][6]}"
 
         hr_donor = ""
-        if self.args.HR_Donor:
-            hr_donor = "# HR Donor: {}\n".format(self.args.HR_Donor)
+        if self.hr_donor:
+            hr_donor = f"# HR Donor: {self.hr_donor}\n"
 
         page_header = \
-            "# ScarMapper Search v{}\n# Run Start: {}\n# Run End: {}\n# Sample Name: {}\n# Locus Name: {}\n" \
-            "# sgRNA: {}\n# Search KMER: {} nucleotides\n{}\n"\
-            .format(self.version, self.run_start, run_stop, sample_name, target_name, sgrna, self.args.Search_KMER,
-                    hr_donor)
+            f"# ScarMapper Search v{self.version}\n# Run Start: {self.run_start}\n# Run End: {run_stop}\n" \
+            f"# Sample Name: {sample_name}\n# Locus Name: {target_name}\n" \
+            f"# sgRNA: {sgrna}\n# Search KMER: {self.args.Search_KMER} nucleotides\n{hr_donor}\n"
 
         return page_header
 
@@ -239,7 +238,7 @@ class ScarSearch:
         @param junction_type_data:
         """
 
-        self.log.info("Working on Frequency Files for {}".format(index_name))
+        self.log.info(f"Working on Frequency Files for {index_name}")
 
         # Dictionaries to hold the left and right kmer sequences
         lft_snv_dict = collections.defaultdict(list)
@@ -255,12 +254,11 @@ class ScarSearch:
 
         # Initialize output string with header information
         freq_results_outstring = \
-            "{}# Total\tFrequency\tScar Type\tLeft Deletions\tRight Deletions\tDeletion Size\tMicrohomology\t" \
+            f"{self.common_page_header(index_name)}# Total\tFrequency\tScar Type\tLeft Deletions\tRight Deletions\tDeletion Size\tMicrohomology\t" \
             "Microhomology Size\tInsertion\tInsertion Size\tLeft Template\tRight Template\tConsensus Left Junction\t" \
             "Consensus Right Junction\tTarget Left Junction\tTarget Right Junction\tLeft Homeology\t" \
             "Left Homeology Position\tLeft Query Seq\tLeft Homeologous Seq\tRight Homeology\t" \
-            "Right Homeology Position\tRight Query Seq\tRight Homeologous Seq\tConsensus\tTarget Region\n"\
-            .format(self.common_page_header(index_name))
+            "Right Homeology Position\tRight Query Seq\tRight Homeologous Seq\tConsensus\tTarget Region\n"
 
         # Initialize kmer data.
         lft_kmer = self.left_target_windows[0]
@@ -313,12 +311,12 @@ class ScarSearch:
             if self.target_dict[target_name][5] == "YES":
                 rt_del = len(results_freq_dict[freq_key][1][0])
                 lft_del = len(results_freq_dict[freq_key][1][1])
-                rt_kmer = Sequence_Magic.rcomp(self.left_target_windows[0])
-                lft_kmer = Sequence_Magic.rcomp(self.right_target_windows[0])
-                microhomology = Sequence_Magic.rcomp(microhomology)
-                insertion = Sequence_Magic.rcomp(insertion)
-                consensus = Sequence_Magic.rcomp(consensus)
-                target_sequence = Sequence_Magic.rcomp(self.target_region)
+                rt_kmer = tools.rcomp(self.left_target_windows[0])
+                lft_kmer = tools.rcomp(self.right_target_windows[0])
+                microhomology = tools.rcomp(microhomology)
+                insertion = tools.rcomp(insertion)
+                consensus = tools.rcomp(consensus)
+                target_sequence = tools.rcomp(self.target_region)
                 tmp_con_lft = consensus_lft_junction
                 tmp_target_lft = ref_lft_junction
                 consensus_lft_junction = len(consensus)-consensus_rt_junction
@@ -469,11 +467,10 @@ class ScarSearch:
 
             # The frequency in the output file should be scar_pattern/total_scars not scar_pattern/scar_count
             frequency_row_list[1] = frequency_row_list[0] / total_scars
-            freq_results_outstring += "{}\n".format("\t".join(str(n) for n in frequency_row_list))
+            freq_results_outstring += f"{chr(9).join(str(n) for n in frequency_row_list)}\n"
 
         freq_results_file = \
-            open("{}{}_{}_ScarMapper_Frequency.txt"
-                 .format(self.args.WorkingFolder, self.args.Job_Name, index_name), "w")
+            open(f"{self.args.WorkingFolder}{self.args.Job_Name}_{index_name}_ScarMapper_Frequency.txt", "w")
 
         freq_results_file.write(freq_results_outstring)
         freq_results_file.close()
@@ -507,25 +504,21 @@ class ScarSearch:
             lft_position_label = ""
             rt_position_label = ""
             for i in range(kmer_size):
-                lft_position_label += "\t{}".format(-1*(kmer_size-i))
-                rt_position_label += "\t{}".format(i+1)
-            snv_outstring = "{}\n\n# Values normalized to number of SNV scars\n\t{}\t{}\n# NT{}{}"\
-                            .format(self.common_page_header(index_name), lft_kmer_string, rt_kmer_string,
-                                    lft_position_label, rt_position_label)
-            snv_all_outstring = "\n\n\n# Values normalized to total number of scars\n\t{}\t{}\n# NT{}{}"\
-                                .format(lft_kmer_string, rt_kmer_string, lft_position_label, rt_position_label)
+                lft_position_label += f"\t{-1*(kmer_size-i)}"
+                rt_position_label += f"\t{i+1}"
+            snv_outstring = f"{self.common_page_header(index_name)}\n\n# Values normalized to number of SNV scars\n\t{lft_kmer_string}\t{rt_kmer_string}\n# NT{lft_position_label}{rt_position_label}"
+            snv_all_outstring = f"\n\n\n# Values normalized to total number of scars\n\t{lft_kmer_string}\t{rt_kmer_string}\n# NT{lft_position_label}{rt_position_label}"
             for nt in nt_list:
-                snv_outstring += "\n# {}".format(nt)
-                snv_all_outstring += "\n# {}".format(nt)
+                snv_outstring += f"\n# {nt}"
+                snv_all_outstring += f"\n# {nt}"
 
                 for v in snv_data[nt]:
-                    snv_outstring += "\t{}".format(round(v/scar_count, 4))
+                    snv_outstring += f"\t{round(v/scar_count, 4)}"
                 for v in snv_data_all[nt]:
-                    snv_all_outstring += "\t{}".format(round(v/total_scars, 4))
+                    snv_all_outstring += f"\t{round(v/total_scars, 4)}"
 
             snv_outfile = \
-                open("{}{}_{}_SNV_Frequency.txt"
-                     .format(self.args.WorkingFolder, self.args.Job_Name, index_name), "w")
+                open(f"{self.args.WorkingFolder}{self.args.Job_Name}_{index_name}_SNV_Frequency.txt", "w")
             snv_outfile.write(snv_outstring+snv_all_outstring)
             snv_outfile.close()
 
@@ -541,7 +534,7 @@ class ScarSearch:
             plot_max = max(marker_list) + max(marker_list) * 0.1
             plot_min = plot_max * -1
             plot_data_dict['Marker'] = [plot_min, plot_max]
-            sample_name = "{}.{}".format(self.index_dict[index_name][5], self.index_dict[index_name][6])
+            sample_name = f"{self.index_dict[index_name][5]}.{self.index_dict[index_name][6]}"
             plot_data_dict['Marker'] = [(max(marker_list)) * -1, max(marker_list)]
 
             ScarMapperPlot.scarmapperplot(self.args, datafile=None, sample_name=sample_name,
@@ -567,12 +560,10 @@ class ScarSearch:
             junction_padding = ref_rt_junction-ref_lft_junction
         iteration_limit = target_size
 
-        lft_query = \
-            "{}".format(consensus[consensus_lft_junction - target_size + len(insertion):
-                                  consensus_lft_junction + len(insertion)])
-        rt_query = \
-            "{}".format(consensus[consensus_rt_junction-len(insertion):
-                                  consensus_rt_junction-len(insertion)+target_size])
+        lft_query = consensus[consensus_lft_junction - target_size + len(insertion):
+                              consensus_lft_junction + len(insertion)]
+        rt_query = consensus[consensus_rt_junction-len(insertion):
+                             consensus_rt_junction-len(insertion)+target_size]
         '''
         if insertion:
             lft_query = \
@@ -606,7 +597,7 @@ class ScarSearch:
         lft_position = ref_rt_junction - junction_padding
         while iteration_count < iteration_limit and not homology:
             target_segment = target_sequence[lft_position:lft_position+target_size]
-            distance_value = Sequence_Magic.match_maker(target_segment, lft_query)
+            distance_value = tools.match_maker(target_segment, lft_query)
             lft_homeology_position = iteration_count - junction_padding
 
             if distance_value == 0:
@@ -629,7 +620,7 @@ class ScarSearch:
         homeology = False
         while iteration_count < iteration_limit and not homology:
             target_segment = target_sequence[rt_position-target_size:rt_position]
-            distance_value = Sequence_Magic.match_maker(target_segment, rt_query)
+            distance_value = tools.match_maker(target_segment, rt_query)
             # rt_homeology = rt_position - target_size
 
             # rt_homeology_position = consensus_lft_junction - iteration_count + junction_padding
@@ -657,10 +648,10 @@ class ScarSearch:
         @param target_name:
         @return:
         """
-        lft_query1 = Sequence_Magic.rcomp(insertion[:5])
+        lft_query1 = tools.rcomp(insertion[:5])
         lft_query2 = insertion[-5:]
         rt_query1 = insertion[:5]
-        rt_query2 = Sequence_Magic.rcomp(insertion[-5:])
+        rt_query2 = tools.rcomp(insertion[-5:])
         lower_limit = lft_target_junction-50
         upper_limit = rt_target_junction+50
         left_not_found = True
@@ -678,7 +669,7 @@ class ScarSearch:
             if lft_query1 == target_segment or lft_query2 == target_segment:
                 lft_template = target_segment
                 if self.target_dict[target_name][5] == "YES":
-                    lft_template = Sequence_Magic.rcomp(target_segment)
+                    lft_template = tools.rcomp(target_segment)
                 left_not_found = False
 
             lft_position -= 1
@@ -692,7 +683,7 @@ class ScarSearch:
             if rt_query1 == target_segment or rt_query2 == target_segment:
                 rt_template = target_segment
                 if self.target_dict[target_name][5] == "YES":
-                    rt_template = Sequence_Magic.rcomp(target_segment)
+                    rt_template = tools.rcomp(target_segment)
                 right_not_found = False
 
             lft_position += 1
@@ -706,13 +697,12 @@ class ScarSearch:
         @param index_name:
         @param read_results_list:
         """
-        results_file = open("{}{}_{}_ScarMapper_Raw_Data.txt"
-                            .format(self.args.WorkingFolder, self.args.Job_Name, index_name), "w")
+        results_file = open(f"{self.args.WorkingFolder}{self.args.Job_Name}_{index_name}_ScarMapper_Raw_Data.txt", "w")
 
         results_outstring = \
-            "{}Left Deletions\tRight Deletions\tDeletion Size\tMicrohomology\tInsertion\tInsertion Size\t" \
+            f"{self.common_page_header(index_name)}Left Deletions\tRight Deletions\tDeletion Size\tMicrohomology\tInsertion\tInsertion Size\t" \
             "Consensus Left Junction\tConsensus Right Junction\tRef Left Junction\tRef Right Junction\t" \
-            "Consensus\tTarget Region\n".format(self.common_page_header(index_name))
+            "Consensus\tTarget Region\n"
 
         for data_list in read_results_list:
             lft_del = len(data_list[0])
@@ -733,10 +723,10 @@ class ScarSearch:
             if self.target_dict[target_name][5] == "YES":
                 rt_del = len(data_list[0])
                 lft_del = len(data_list[1])
-                consensus = Sequence_Magic.rcomp(data_list[4])
-                target_region = Sequence_Magic.rcomp(self.target_region)
-                microhomology = Sequence_Magic.rcomp(data_list[3])
-                total_ins = Sequence_Magic.rcomp(data_list[2])
+                consensus = tools.rcomp(data_list[4])
+                target_region = tools.rcomp(self.target_region)
+                microhomology = tools.rcomp(data_list[3])
+                total_ins = tools.rcomp(data_list[2])
 
                 tmp_con_lft = consensus_lft_junction
                 tmp_target_lft = ref_lft_junction
@@ -749,9 +739,7 @@ class ScarSearch:
             if del_size == 0 and ins_size == 0:
                 continue
 
-            results_outstring += "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n" \
-                .format(lft_del, rt_del, del_size, microhomology, total_ins, ins_size, consensus_lft_junction,
-                        consensus_rt_junction, ref_lft_junction, ref_rt_junction, consensus, target_region)
+            results_outstring += f"{lft_del}\t{rt_del}\t{del_size}\t{microhomology}\t{total_ins}\t{ins_size}\t{consensus_lft_junction}\t{consensus_rt_junction}\t{ref_lft_junction}\t{ref_rt_junction}\t{consensus}\t{target_region}\n"
 
         results_file.write(results_outstring)
         results_file.close()
@@ -773,7 +761,7 @@ class ScarSearch:
         rcomp_sgrna = False
 
         if self.target_dict[target_name][5] == 'YES':
-            working_sgrna = Sequence_Magic.rcomp(sgrna)
+            working_sgrna = tools.rcomp(sgrna)
             rcomp_sgrna = True
 
         cutsite_found = False
@@ -790,8 +778,7 @@ class ScarSearch:
             rt_position += 1
 
         if not cutsite_found:
-            self.log.error("sgRNA {} does not map to locus {}; chr{}:{}-{}.  Check --TargetFile and try again."
-                           .format(sgrna, target_name, chrm, start, stop))
+            self.log.error(f"sgRNA {sgrna} does not map to locus {target_name}; chr{chrm}:{start}-{stop}.  Check --TargetFile and try again.")
             raise SystemExit(1)
 
     def gapped_aligner(self, fasta_data):
@@ -910,7 +897,7 @@ class DataProcessing:
                     if self.args.Demultiplex:
                         self.finalize_demultiplexing(fastq_data_dict)
 
-                    Tool_Box.debug_messenger("Limiting Reads Here to {}".format(read_limit))
+                    tools.debug_messenger(f"Limiting Reads Here to {read_limit}")
                     eof = True
             fastq2_read = None
             try:
@@ -930,8 +917,7 @@ class DataProcessing:
                 elapsed_time = int(time.time() - start_time)
                 block_time = int(time.time() - split_time)
                 split_time = time.time()
-                self.log.info("Processed {} reads in {} seconds.  Total elapsed time: {} seconds."
-                              .format(self.read_count, block_time, elapsed_time))
+                self.log.info(f"Processed {self.read_count} reads in {block_time} seconds.  Total elapsed time: {elapsed_time} seconds.")
 
             # Match read with library index.
             match_found, left_seq, right_seq, index_name = self.index_matching(fastq1_read, fastq2_read)
@@ -939,7 +925,7 @@ class DataProcessing:
             if match_found:
                 indexed_read_count += 1
                 locus = self.index_dict[index_name][7]
-                phase_key = "{}+{}".format(index_name, locus)
+                phase_key = f"{index_name}+{locus}"
                 r2_found = False
                 r1_found = False
                 if self.args.Platform == "Illumina":
@@ -960,7 +946,7 @@ class DataProcessing:
                             self.phase_count[phase_key]["Phase " + r2_phase_name] += 0
 
                         # The phasing is the last N nucleotides of the consensus.
-                        if r2_phase[0] == Sequence_Magic.rcomp(fastq1_read.seq[-len(r2_phase[0]):]) and not r2_found:
+                        if r2_phase[0] == tools.rcomp(fastq1_read.seq[-len(r2_phase[0]):]) and not r2_found:
                             self.phase_count[phase_key]["Phase "+r2_phase_name] += 1
                             r2_found = True
 
@@ -978,11 +964,10 @@ class DataProcessing:
                     self.sequence_dict[index_name].append(right_seq)
 
                 elif self.args.Platform == "Ramsden":
-                    self.sequence_dict[index_name].append(Sequence_Magic.rcomp(fastq1_read.seq))
+                    self.sequence_dict[index_name].append(tools.rcomp(fastq1_read.seq))
 
                 else:
-                    self.log.error("--Platform {} not correctly defined.  Edit parameter file and try again"
-                                   .format(self.args.Platform))
+                    self.log.error(f"--Platform {self.args.Platform} not correctly defined.  Edit parameter file and try again")
                     raise SystemExit(1)
 
                 if self.args.Demultiplex:
@@ -990,16 +975,14 @@ class DataProcessing:
                     if not self.args.PEAR:
                         fastq_data_dict[index_name]["R2"].append([fastq2_read.name, fastq2_read.seq, fastq2_read.qual])
 
-                    fastq_file_name_list.append("{}{}_{}_Consensus.fastq"
-                                                .format(self.args.WorkingFolder, self.args.Job_Name, index_name))
+                    fastq_file_name_list.append(f"{self.args.WorkingFolder}{self.args.Job_Name}_{index_name}_Consensus.fastq")
 
             elif self.args.Demultiplex and not match_found:
                 fastq_data_dict['Unknown']["R1"].append([fastq1_read.name, fastq1_read.seq, fastq1_read.qual])
                 if not self.args.PEAR:
                     fastq_data_dict['Unknown']["R2"].append([fastq1_read.name, fastq1_read.seq, fastq1_read.qual])
 
-                fastq_file_name_list.append("{}{}_Unknown_Consensus.fastq"
-                                            .format(self.args.WorkingFolder, self.args.Job_Name))
+                fastq_file_name_list.append(f"{self.args.WorkingFolder}{self.args.Job_Name}_Unknown_Consensus.fastq")
 
         if self.args.Demultiplex:
             self.fastq_compress(list(set(fastq_file_name_list)))
@@ -1028,10 +1011,10 @@ class DataProcessing:
         Take a list of file names and gzip each file.
         @param fastq_file_name_list:
         """
-        self.log.info("Spawning {} Jobs to Compress {} Files.".format(self.args.Spawn, len(fastq_file_name_list)))
+        self.log.info(f"Spawning {self.args.Spawn} Jobs to Compress {len(fastq_file_name_list)} Files.")
 
         p = pathos.multiprocessing.Pool(self.args.Spawn)
-        p.starmap(Tool_Box.compress_files, zip(fastq_file_name_list, itertools.repeat(self.log)))
+        p.starmap(tools.compress_files, zip(fastq_file_name_list, itertools.repeat(self.log)))
 
         self.log.info("All Files Compressed")
 
@@ -1043,7 +1026,7 @@ class DataProcessing:
         self.log.info("Beginning main loop|Demultiplexing FASTQ")
         indexed_read_count, lower_limit = self.consensus_demultiplex()
 
-        self.log.info("Spawning {} Jobs to Process {} Libraries".format(self.args.Spawn, len(self.sequence_dict)))
+        self.log.info(f"Spawning {self.args.Spawn} Jobs to Process {len(self.sequence_dict)} Libraries")
         p = pathos.multiprocessing.Pool(self.args.Spawn)
 
         # My solution for passing key:value pairs to the multiprocessor.  Largest value group goes first.
@@ -1071,15 +1054,12 @@ class DataProcessing:
         # If we are saving the demultiplexed FASTQ then set up the output files and dataframe.
         if self.args.Demultiplex:
             self.fastq_outfile_dict = collections.defaultdict(list)
-            r1 = FASTQ_Tools.Writer(self.log, "{}{}_Unknown_R1.fastq"
-                                    .format(self.args.WorkingFolder, self.args.Job_Name))
+            r1 = tools.Writer(self.log, f"{self.args.WorkingFolder}{self.args.Job_Name}_Unknown_R1.fastq")
             r2 = ""
             if not self.args.PEAR:
-                r2 = FASTQ_Tools.Writer(self.log, "{}{}_Unknown_R2.fastq"
-                                        .format(self.args.WorkingFolder, self.args.Job_Name))
-            self.fastq_outfile_dict['Unknown'] = [r1, r2]
+                r2 = tools.Writer(self.log, f"{self.args.WorkingFolder}{self.args.Job_Name}_Unknown_R2.fastq")
+                self.fastq_outfile_dict['Unknown'] = [r1, r2]
 
-        # ToDo: call the demultiplex stuff from FASTQ_Tools.
         master_index_dict = {}
         with open(self.args.Master_Index_File) as f:
             for l in f:
@@ -1088,15 +1068,14 @@ class DataProcessing:
                 l_list = [x for x in l.strip("\n").split("\t")]
                 master_index_dict[l_list[0]] = [l_list[1], l_list[2]]
 
-        sample_index_list = Tool_Box.FileParser.indices(self.log, self.args.SampleManifest)
+        sample_index_list = tools.FileParser.indices(self.log, self.args.SampleManifest)
         index_dict = collections.defaultdict(list)
 
         for sample in sample_index_list:
             index_name = sample[0]
 
             if index_name in index_dict:
-                self.log.error("The index {} is duplicated.  Correct the error in {} and try again."
-                               .format(sample[0], self.args.SampleManifest))
+                self.log.error(f"The index {sample[0]} is duplicated.  Correct the error in {self.args.SampleManifest} and try again.")
                 raise SystemExit(1)
 
             sample_name = sample[1]
@@ -1107,19 +1086,23 @@ class DataProcessing:
                 self.log.error("Sample Manifest is missing Target Name column")
                 raise SystemExit(1)
 
+            # Get sample-specific HR_Donor if available (column 7)
+            sample_hr_donor = ""
+            if len(sample) > 7 and sample[7]:
+                sample_hr_donor = sample[7].upper().strip()
+                self.log.info(f"Sample {index_name} has specific HR_Donor: {sample_hr_donor}")
+
             left_index_sequence, right_index_sequence = master_index_dict[index_name]
             index_dict[index_name] = \
                 [right_index_sequence.upper(), 0, left_index_sequence.upper(), 0, index_name, sample_name,
-                 sample_replicate, target_name]
+                 sample_replicate, target_name, sample_hr_donor]
 
             if self.args.Demultiplex:
-                r1 = FASTQ_Tools.Writer(self.log, "{}{}_{}_R1.fastq"
-                                        .format(self.args.WorkingFolder, self.args.Job_Name, index_name))
+                r1 = tools.Writer(self.log, f"{self.args.WorkingFolder}{self.args.Job_Name}_{index_name}_R1.fastq")
                 r2 = ""
                 if not self.args.PEAR:
-                    r2 = FASTQ_Tools.Writer(self.log, "{}{}_{}_R2.fastq"
-                                            .format(self.args.WorkingFolder, self.args.Job_Name, index_name))
-                self.fastq_outfile_dict[index_name] = [r1, r2]
+                    r2 = tools.Writer(self.log, f"{self.args.WorkingFolder}{self.args.Job_Name}_{index_name}_R2.fastq")
+                    self.fastq_outfile_dict[index_name] = [r1, r2]
 
         return index_dict
 
@@ -1152,23 +1135,23 @@ class DataProcessing:
 
             if self.args.Platform == "Illumina":
                 # The indices are after the last ":" in the header.
-                right_match = Sequence_Magic.match_maker(right_index, fastq1_read.name.split(":")[-1].split("+")[0])
-                left_match = Sequence_Magic.match_maker(left_index, fastq1_read.name.split(":")[-1].split("+")[1])
+                right_match = tools.match_maker(right_index, fastq1_read.name.split(":")[-1].split("+")[0])
+                left_match = tools.match_maker(left_index, fastq1_read.name.split(":")[-1].split("+")[1])
 
             elif self.args.Platform == "TruSeq":
                 # The indices are the first 6 and last 6 nucleotides of the consensus read.
-                left_match = Sequence_Magic.match_maker(right_index, fastq1_read.seq[:6])
-                right_match = Sequence_Magic.match_maker(left_index, fastq1_read.seq[-6:])
+                left_match = tools.match_maker(right_index, fastq1_read.seq[:6])
+                right_match = tools.match_maker(left_index, fastq1_read.seq[-6:])
 
             elif self.args.Platform == "Ramsden":
                 if self.args.PEAR:
                     left_match = \
-                        Sequence_Magic.match_maker(left_index, fastq1_read.seq[-len(left_index):])
+                        tools.match_maker(left_index, fastq1_read.seq[-len(left_index):])
                 else:
                     left_match = \
-                        Sequence_Magic.match_maker(Sequence_Magic.rcomp(left_index), fastq2_read.seq[:len(left_index)])
+                        tools.match_maker(tools.rcomp(left_index), fastq2_read.seq[:len(left_index)])
                 right_match = \
-                    Sequence_Magic.match_maker(right_index, fastq1_read.seq[:len(right_index)])
+                    tools.match_maker(right_index, fastq1_read.seq[:len(right_index)])
 
             if index_key not in self.read_count_dict:
                 self.read_count_dict[index_key] = 0
@@ -1209,15 +1192,16 @@ class DataProcessing:
 
         self.log.info("Formatting data and writing summary file")
 
-        summary_file = open("{}{}_ScarMapper_Summary.txt".format(self.args.WorkingFolder, self.args.Job_Name), "w")
+        summary_file = open(f"{self.args.WorkingFolder}{self.args.Job_Name}_ScarMapper_Summary.txt", "w")
 
         hr_labels = ""
-        if self.args.HR_Donor:
-            hr_labels = "HR Count\tHR Fraction"
+        if self.args.HR_Donor or any(len(self.index_dict[idx]) > 8 and self.index_dict[idx][8] 
+                                     for idx in self.index_dict):
+            hr_labels = "HR_Donor_Seq\tHR Count\tHR Fraction\t"
 
         sub_header = \
-            "No Junction\tScar Count\tScar Fraction\tSNV\t{}\tLeft Deletion Count\tRight Deletion Count\t" \
-            "Insertion Count\tMicrohomology Count\tNormalized Microhomology".format(hr_labels)
+            f"No Junction\tScar Count\tScar Fraction\tSNV\t{hr_labels}\tLeft Deletion Count\tRight Deletion Count\t" \
+            "Insertion Count\tMicrohomology Count\tNormalized Microhomology"
 
         phasing_labels = ""
         phase_label_list = []
@@ -1226,34 +1210,26 @@ class DataProcessing:
             for locus in self.phase_count:
                 if len(natsort.natsorted(self.phase_count[locus])) > 4:
                     for phase_label in natsort.natsorted(self.phase_count[locus]):
-                        phasing_labels += "{}\t".format(phase_label)
+                        phasing_labels += f"{phase_label}\t"
                         phase_label_list.append(phase_label)
                     break
 
         hr_data = ""
         if self.args.HR_Donor:
-            hr_data = "HR Donor: {}\n".format(self.args.HR_Donor)
+            hr_data = f"Global HR Donor: {self.args.HR_Donor}\n"
 
         run_stop = datetime.datetime.today().strftime(self.date_format)
         summary_outstring = \
-            "ScarMapper v{}\nStart: {}\nEnd: {}\nFASTQ1: {}\nFASTQ2: {}\nConsensus Reads Analyzed: {}\n{}\n"\
-            .format(self.version, self.run_start, run_stop, self.args.FASTQ1, self.args.FASTQ2, self.read_count,
-                    hr_data)
+            f"ScarMapper v{self.version}\nStart: {self.run_start}\nEnd: {run_stop}\nFASTQ1: {self.args.FASTQ1}\n" \
+            f"FASTQ2: {self.args.FASTQ2}\nConsensus Reads Analyzed: {self.read_count}\n{hr_data}\n"
 
         summary_outstring += \
             "Index Name\tSample Name\tSample Replicate\tTarget\tTotal Found\tFraction Total\tPassing Read Filters\t" \
-            "Fraction Passing Filters\t{}{}\tTMEJ\tNormalized TMEJ\tNHEJ\tNormalized NHEJ\t" \
+            f"Fraction Passing Filters\t{phasing_labels}{sub_header}\tTMEJ\tNormalized TMEJ\tNHEJ\tNormalized NHEJ\t" \
             "Non-Microhomology Deletions\tNormalized Non-MH Del\tInsertion >=5 +/- Deletions\t" \
-            "Normalized Insertion >=5+/- Deletions\tOther Scar Type\n"\
-            .format(phasing_labels, sub_header)
+            "Normalized Insertion >=5+/- Deletions\tOther Scar Type\n"
 
-        '''
-        The data_list contains information for each library.  [0] index name; [1] reads passing all 
-        filters; [2] reads with a left junction; [3] reads with a right junction; [4] reads with an insertion;
-        [5] reads with microhomology; [6] reads with no identifiable cut; [7] filtered reads [8] scar type list.
-        '''
-
-        for data_list in summary_data_list:    
+        for data_list in summary_data_list:
             index_name = data_list.summary_data[0]
             sample_name = self.index_dict[index_name][5]
             sample_replicate = self.index_dict[index_name][6]
@@ -1267,7 +1243,7 @@ class DataProcessing:
             microhomology = data_list.summary_data[5]
             cut = passing_filters-data_list.summary_data[6][1]-data_list.summary_data[6][0]
             target = data_list.summary_data[9]
-            phase_key = "{}+{}".format(index_name, target)
+            phase_key = f"{index_name}+{target}"
 
             phase_data = ""
             loop_count = 0
@@ -1277,7 +1253,7 @@ class DataProcessing:
                     for i in range(len(phase_label_list)):
                         phase_data += "n.a.\t"
                 elif len(self.phase_count[phase_key]) > 4:
-                    phase_data += "{}\t".format(self.phase_count[phase_key][phase]/library_read_count)
+                    phase_data += f"{self.phase_count[phase_key][phase]/library_read_count}\t"
 
             no_junction = data_list.summary_data[6][0]
 
@@ -1286,12 +1262,15 @@ class DataProcessing:
             except ZeroDivisionError:
                 cut_fraction = 'nan'
 
-            # Process HR data if present
+            # Process HR data if present - show sample-specific HR_Donor
             hr_data = ""
-            if self.args.HR_Donor:
-                hr_count = "{}; {}".format(data_list.summary_data[10][0], data_list.summary_data[10][1])
-                hr_frequency = sum(data_list.summary_data[10])/passing_filters
-                hr_data = "\t{}\t{}".format(hr_count, hr_frequency)
+            sample_hr_donor = self.index_dict[index_name][8] if len(self.index_dict[index_name]) > 8 else ""
+
+            if sample_hr_donor or (hasattr(self.args, 'HR_Donor') and self.args.HR_Donor):
+                display_donor = sample_hr_donor if sample_hr_donor else self.args.HR_Donor
+                hr_count = f"{data_list.summary_data[10][0]}; {data_list.summary_data[10][1]}"
+                hr_frequency = sum(data_list.summary_data[10])/passing_filters if passing_filters > 0 else 0
+                hr_data = f"\t{display_donor}\t{hr_count}\t{hr_frequency}"
 
             try:
                 tmej = data_list.summary_data[8][0]
@@ -1319,18 +1298,15 @@ class DataProcessing:
                 snv_fraction = snv/cut
 
             summary_outstring += \
-                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}{}\t{}\t{}\t{}{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t" \
-                "{}\t{}\t{}\n"\
-                .format(index_name, sample_name, sample_replicate, target, library_read_count, fraction_all_reads,
-                        passing_filters, fraction_passing, phase_data, no_junction, cut, cut_fraction, snv_fraction,
-                        hr_data, left_del, right_del, total_ins, microhomology, microhomology_fraction, tmej,
-                        tmej_fraction, nhej, nhej_fraction, non_microhomology_del, non_mh_del_fraction, large_ins,
-                        large_ins_fraction, other_scar)
-        try:
-            summary_outstring += "\nUnidentified\t{}\t{}" \
-                .format(self.read_count_dict["unidentified"], self.read_count_dict["unidentified"] / self.read_count)
-        except KeyError:
-            pass
+                f"{index_name}\t{sample_name}\t{sample_replicate}\t{target}\t{library_read_count}\t{fraction_all_reads}\t" \
+                f"{passing_filters}\t{fraction_passing}\t{phase_data}{no_junction}\t{cut}\t{cut_fraction}\t{snv_fraction}" \
+                f"{hr_data}\t{left_del}\t{right_del}\t{total_ins}\t{microhomology}\t{microhomology_fraction}\t{tmej}\t" \
+                f"{tmej_fraction}\t{nhej}\t{nhej_fraction}\t{non_microhomology_del}\t{non_mh_del_fraction}\t{large_ins}\t" \
+                f"{large_ins_fraction}\t{other_scar}\n"
+            try:
+                summary_outstring += f"\nUnidentified\t{self.read_count_dict['unidentified']}\t{self.read_count_dict['unidentified'] / self.read_count}"
+            except KeyError:
+                pass
 
         summary_file.write(summary_outstring)
         summary_file.close()

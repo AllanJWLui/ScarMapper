@@ -1,6 +1,7 @@
 # ScarMapper Specific
 FASTQ/
 Results/
+test/
 *.html
 *.c
 *.adapters

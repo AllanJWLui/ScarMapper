@@ -1,0 +1,3 @@
+Index_Name	Sample_ID	Replicate	Forward_Phase	Reverse_Phase	Locus	FASTQ1_Path 	FASTQ2_Path	HR_donor_scarmapper
+EF-UDP-1	1	1			Rosa26a	/path/to/fastq/files/AEG588A1_S1_L002_R1_001.fastq.gz	/path/to/fastq/files/AEG588A1_S1_L002_R2_001.fastq.gz	
+EF-UDP-2	2	1			AAVS1.1	/path/to/fastq/files/AEG588A4_S4_L003_R1_001.fastq.gz		AAAAAAAAAAAAAAAAAAAAAAA

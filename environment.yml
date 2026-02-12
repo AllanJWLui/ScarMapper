@@ -1,0 +1,11 @@
+name: scarmapper
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.8
+  - pear>=0.9.6
+  - pip
+  - pip:
+    - .

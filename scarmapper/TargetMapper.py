@@ -1,17 +1,7 @@
-"""
-
-@author: Dennis A. Simpson
-         University of North Carolina at Chapel Hill
-         Chapel Hill, NC  27599
-@copyright: 2022
-"""
+"""Target mapping utilities for ScarMapper."""
 
 import collections
-from Valkyries import Tool_Box
-
-__author__ = 'Dennis A. Simpson'
-__version__ = '1.0.0'
-__package__ = 'ScarMapper'
+from scarmapper import tools
 
 
 class TargetMapper:
@@ -21,8 +11,8 @@ class TargetMapper:
         :param log:
         :param args:
         """
-        self.target_data = Tool_Box.FileParser.indices(log, args.TargetFile)
-        # self.target_data = [x[0] for x in Tool_Box.FileParser.indices(log, args.TargetFile)]
+        self.target_data = tools.FileParser.indices(log, args.TargetFile)
+        # self.target_data = [x[0] for x in tools.FileParser.indices(log, args.TargetFile)]
         self.sample_manifest = sample_manifest
         self.log = log
         self.args = args
@@ -48,7 +38,7 @@ class TargetMapper:
                 continue
 
             '''
-            While I believe it unlikely to ever be needed, this code allows the forward and reverse reads to have 
+            While I believe it unlikely to ever be needed, this code allows the forward and reverse reads to have
             different phasing lengths.
             '''
             forward_phase_seq = sample[4]
@@ -61,8 +51,8 @@ class TargetMapper:
             r_left_position = reverse_seq_length - reverse_phase_length
 
             for i in range(forward_phase_length+1):
-                f_phase = "F{}".format(i)
-                r_phase = "R{}".format(i)
+                f_phase = f"F{i}"
+                r_phase = f"R{i}"
                 forward_sequence = forward_phase_seq[f_left_position-i:forward_seq_length-i]
                 reverse_sequence = reverse_phase_seq[r_left_position-i:reverse_seq_length-i]
                 phasing_dict[locus]["R1"].append([forward_sequence, f_phase])

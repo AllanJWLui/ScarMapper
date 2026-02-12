@@ -1,51 +1,162 @@
 # ScarMapper
-## A Python-encoded algorithm that uses an iterative break-associated alignment strategy to classify individual double-strand DNA break repair products based on deletion size, microhomology usage, and insertions
 
-### Getting Started
+A Python package that uses an iterative break-associated alignment strategy to classify individual double-strand DNA break repair products based on deletion size, microhomology usage, and insertions.
 
-These instructions should allow a functional copy of this package to be installed on your local computer.  It is highly recomended
-that you read the user guide before attempting to use this program.
+## Getting Started
 
 ### Prerequisites
-Linux OS, tested on RHEL 7.x, Scientific Linux 7.x, and CentOS 7.x.  Will possibly run on a Mac OS, although it has not been tested.  Will not run on Windows because ScarMapper uses Pysam to parse the reference FASTA file.
 
-```
-Minimum System Requirements:
-    4 CPUs or threads
-    20 Gb RAM
-    ~5x the size of the compressed FASTQ file for disk space.
+ScarMapper runs on Linux (tested on RHEL 7.x, Scientific Linux 7.x, CentOS 7.x) and may work on macOS, though it has not been tested. It will not run on Windows because ScarMapper uses Pysam, which requires a POSIX environment.
 
-Required Python Libraries:
-    Python ≥v3.5, ≥v3.6 recomended
-    numpy
-    scipy
-    python-levenshtein
-    python-magic
-    natsort
-    pathos
-    pysam
-    cython
-    setuptools
-```
+**Minimum System Requirements:**
+- 4 CPUs or threads
+- 20 GB RAM
+- ~5x the size of the compressed FASTQ file for disk space
+
+**Software Requirements:**
+- Python >= 3.8
+- [PEAR](https://cme.h-its.org/exelixis/web/software/pear/) (for paired-end read merging)
+
+All Python dependencies are installed automatically via pip.
+
 ### Installation
 
-The quickest way to install is to clone or download this repository into a location that accessible to the user.
-Test installation by moving to the ScarMapper directory and executing ```python3 scarmapper.py```.  You should get the error message ```usage: scarmapper.py [-h] --options_file OPTIONS_FILE
- scarmapper.py: error: the following arguments are required: --options_file```.
- 
-### Contributing
+Clone or download this repository, then install with pip:
+
+```bash
+git clone https://github.com/AllanJWLui/ScarMapper.git
+cd ScarMapper
+pip install .
+```
+
+For development (editable install):
+
+```bash
+pip install -e ".[dev]"
+```
+
+Verify installation:
+
+```bash
+scarmapper --help
+```
+
+### Installation with Conda (recommended for HPC)
+
+This installs ScarMapper and the PEAR binary together:
+
+```bash
+git clone https://github.com/AllanJWLui/ScarMapper.git
+cd ScarMapper
+conda env create -f environment.yml
+conda activate scarmapper
+```
+
+Alternatively, if PEAR is already available (e.g. via `module load`), you can install ScarMapper with pip alone.
+
+### Input Files
+
+ScarMapper requires several input files. Templates are provided in the `docs/` directory.
+
+| File | Description |
+|------|-------------|
+| **FASTQ files** | Paired-end R1 and R2 reads (gzipped or uncompressed) |
+| **Reference genome** | FASTA file with an index (`.fai`) in the same directory |
+| **Master index file** | Tab-delimited file mapping index names to forward/reverse barcode sequences |
+| **Sample manifest** | Tab-delimited file mapping index names to sample names, replicates, loci, and optionally per-sample FASTQ paths and HR donor sequences |
+| **Target file** | Tab-delimited file defining each genomic target: name, chromosome, start, stop, sgRNA sequence, and strand orientation |
+
+See `docs/ScarMapper_Manifest.tsv` and `docs/ScarMapper_Targets.tsv` for example formats.
+
+## Usage
+
+ScarMapper has three processing modes, each driven by an options file:
+
+```bash
+scarmapper --options_file <config_file>.cfg
+```
+
+### Indel Processing (multiplexed FASTQ)
+
+For standard runs with multiplexed FASTQ files containing multiple samples:
+
+```bash
+scarmapper --options_file ScarMapper_IndelProcessing.cfg
+```
+
+This mode demultiplexes reads by index, merges paired-end reads using PEAR, then identifies and classifies repair scars at each target locus.
+
+### Batch Processing (pre-demultiplexed samples)
+
+For runs where each sample already has its own FASTQ file(s):
+
+```bash
+scarmapper --options_file ScarMapper_Batch.cfg
+```
+
+The sample manifest must include a `FASTQ1_Path` column (and optionally `FASTQ2_Path`) pointing to each sample's files. Per-sample HR donor sequences can also be specified in the manifest.
+
+### Combine Replicates
+
+To merge frequency files from replicate experiments and produce a combined plot:
+
+```bash
+scarmapper --options_file ScarMapper_Combine.cfg
+```
+
+### Options Files
+
+Options files are tab-delimited configuration files (`.cfg`). Each option must be separated from its value by exactly **one tab character**. Template options files for all three modes are provided in the `docs/` directory:
+
+- `docs/ScarMapper_IndelProcessing.cfg`
+- `docs/ScarMapper_Batch.cfg`
+- `docs/ScarMapper_Combine.cfg`
+
+### Platform Support
+
+The `--Platform` option controls how ScarMapper identifies sample indices on each read:
+
+| Platform | Index Location | Mismatch Tolerance |
+|----------|---------------|-------------------|
+| **Illumina** | Parsed from FASTQ header after last `:`, split on `+` | 1 |
+| **TruSeq** | First and last 6 nucleotides of read sequence | 0 (exact match) |
+| **Ramsden** | Start of R1 and start of R2 (or end of R1 if PEAR merged) | 3 |
+
+## Output Files
+
+ScarMapper produces several output files in the working folder:
+
+| File | Description |
+|------|-------------|
+| `*_ScarMapper_Summary.txt` | Per-library summary with scar counts and repair pathway fractions |
+| `*_ScarMapper_Frequency.txt` | Per-library scar pattern frequencies with junction details |
+| `*_ScarMapper_Raw_Data.txt` | Per-read scar data (if `--OutputRawData True`) |
+| `*_SNV_Frequency.txt` | SNV positional frequency data (if SNVs detected) |
+| `*.<FigureType>` | Scar pattern plots for each library |
+| `*_Batch_Summary.txt` | Combined summary for batch mode |
+
+## Scar Classification
+
+ScarMapper classifies each repair scar into one of six categories:
+
+| Category | Criteria |
+|----------|----------|
+| **TMEJ** | Deletion >= 4 nt and microhomology >= 2 nt |
+| **NHEJ** | Deletion < 4 nt and insertion < 5 nt |
+| **Non-MH Deletion** | Deletion >= 4 nt, microhomology < 2 nt, and insertion < 5 nt |
+| **Insertion** | Insertion >= 5 nt, with or without deletions |
+| **SNV** | Deletion > 1 nt, deletion size equals insertion size, within kmer bounds |
+| **HR** | Homologous recombination donor sequence detected (requires `--HR_Donor`) |
+
+## Contributing
+
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
-Please make sure to update tests as appropriate.
+## Authors
 
-### Authors
+* **Allan Lui**
+* **Dennis Simpson** — *Initial work*
 
-* **Dennis Simpson** - *Initial work* 
+## License
 
-### Cite
-
-[![PubMed](img/2318832.png)](https://www.ncbi.nlm.nih.gov/pubmed/xxx)
-
-### License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
+This project is licensed under the MIT License. See [LICENSE.md](LICENSE.md) for details.
