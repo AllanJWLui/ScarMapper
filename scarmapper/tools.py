@@ -259,6 +259,11 @@ class FASTQ_Reader:
             self.log.warning(f"FASTQ file {self.input_file} not found.  Correct error and run again.")
             raise SystemExit(1)
 
+        # Check if file is empty
+        if pathlib.Path(self.input_file).stat().st_size == 0:
+            self.log.warning(f"FASTQ file {self.input_file} is empty. This may indicate PEAR failed to merge reads or input files were empty.")
+            raise SystemExit(1)
+
         try:
             mime_type = magic.from_file(self.input_file, mime=True).decode()
         except AttributeError:

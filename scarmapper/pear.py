@@ -93,14 +93,23 @@ def pear_consensus(args, log, fq1=None, fq2=None, sample_prefix=None):
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True,
     )
 
-    if proc.stderr:
-        log.error(f"{proc.stderr.decode()}\n{proc.stdout.decode()}\n")
+    # Check return code instead of stderr (PEAR writes info to stderr)
+    if proc.returncode != 0:
+        log.error(
+            f"PEAR failed with exit code {proc.returncode}\n"
+            f"STDERR: {proc.stderr.decode()}\n"
+            f"STDOUT: {proc.stdout.decode()}\n"
+        )
         return None
 
     log.info(
         "Begin PEAR Output\n"
         f"{'-' * 106}\n{proc.stdout.decode()}\n{'-' * 106}\n"
     )
+
+    # Log stderr separately if present (may contain warnings)
+    if proc.stderr:
+        log.info(f"PEAR stderr:\n{proc.stderr.decode()}")
 
     file_list = [
         output_files['assembled'],
