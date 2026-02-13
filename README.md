@@ -62,24 +62,24 @@ For HPC clusters where Docker is unavailable, use Singularity to run containeriz
 
 ```bash
 # Singularity (on HPC)
-singularity pull docker://ghcr.io/allanjwlui/scarmapper:3.0.0
-# Creates: scarmapper_3.0.0.sif
+singularity pull docker://ghcr.io/allanjwlui/scarmapper:3.0.1
+# Creates: scarmapper_3.0.1.sif
 
 # Docker (local machine)
-docker pull ghcr.io/allanjwlui/scarmapper:3.0.0
+docker pull ghcr.io/allanjwlui/scarmapper:3.0.1
 ```
 
 #### Quick start with Singularity
 
 ```bash
 # Show help
-singularity exec scarmapper_3.0.0.sif scarmapper --help
+singularity exec scarmapper_3.0.1.sif scarmapper --help
 
 # Run with bind mounts
 singularity exec \
   --bind /path/to/your/data:/data \
   --bind /path/to/your/output:/output \
-  scarmapper_3.0.0.sif \
+  scarmapper_3.0.1.sif \
   scarmapper --options_file /data/ScarMapper_IndelProcessing.cfg
 ```
 
@@ -88,7 +88,7 @@ singularity exec \
 ```bash
 # Setup
 cd /scratch/your_username/scarmapper_run
-singularity pull docker://ghcr.io/allanjwlui/scarmapper:3.0.0
+singularity pull docker://ghcr.io/allanjwlui/scarmapper:3.0.1
 
 # Organize files
 mkdir -p data output
@@ -108,7 +108,7 @@ cp ScarMapper_IndelProcessing.cfg data/
 singularity exec \
   --bind $(pwd)/data:/data \
   --bind $(pwd)/output:/output \
-  scarmapper_3.0.0.sif \
+  scarmapper_3.0.1.sif \
   scarmapper --options_file /data/ScarMapper_IndelProcessing.cfg
 
 # Results will be in ./output/
@@ -130,7 +130,7 @@ cd /scratch/$USER/scarmapper_project
 singularity exec \
   --bind ./data:/data \
   --bind ./output:/output \
-  scarmapper_3.0.0.sif \
+  scarmapper_3.0.1.sif \
   scarmapper --options_file /data/config.cfg
 ```
 
@@ -140,7 +140,7 @@ singularity exec \
 docker run --rm \
   -v /path/to/data:/data \
   -v /path/to/output:/output \
-  ghcr.io/allanjwlui/scarmapper:3.0.0 \
+  ghcr.io/allanjwlui/scarmapper:3.0.1 \
   --options_file /data/config.cfg
 ```
 
